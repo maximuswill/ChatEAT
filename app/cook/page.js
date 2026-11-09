@@ -1,8 +1,7 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import AppBar from "../AppBar";
 import CookClient from "./CookClient";
-import { getCurrentUser } from "../../lib/auth";
+import { requireMember } from "../../lib/auth";
 import { getProfile } from "../../lib/profile";
 import { hardRules } from "../../lib/allergens";
 import { aiStatus } from "../../lib/recipe-ai";
@@ -11,8 +10,7 @@ import "./cook.css";
 export const metadata = { title: "What should I make? · ChatEAT" };
 
 export default async function CookPage() {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  const user = await requireMember();
   const profile = await getProfile(user.id);
 
   return (

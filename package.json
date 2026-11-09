@@ -8,13 +8,15 @@
     "start": "next start",
     "db:setup": "node --env-file-if-exists=.env.local scripts/setup-db.mjs",
     "account:create": "node --env-file-if-exists=.env.local scripts/create-account.mjs",
-    "ai:spend": "node --env-file-if-exists=.env.local scripts/ai-spend.mjs"
+    "ai:spend": "node --env-file-if-exists=.env.local scripts/ai-spend.mjs",
+    "stripe:setup": "node --env-file-if-exists=.env.local scripts/stripe-setup.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.6.0",
     "@neondatabase/serverless": "^1.2.0",
     "next": "^16.4.5",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "stripe": "^23.1.0"
   }
 }

@@ -1,0 +1,32 @@
+/* My pantry. Colors come from app/globals.css; chips and buttons reuse onboarding styles. */
+.pantry { display: grid; gap: 18px; }
+.pantry-card { background: var(--white); border: 2px solid var(--sky); border-radius: 22px; padding: 22px 24px; display: grid; gap: 12px; }
+.pantry-card h2 { font-weight: 800; font-size: 1.4rem; }
+.pantry-card-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.pantry-card-head .button { margin-top: 0; }
+.pantry-sub { color: var(--muted); font-size: 0.95rem; }
+.pantry-empty { color: var(--muted); }
+.pantry-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px 24px; }
+.pantry-group h3 { font-size: 0.95rem; font-weight: 800; color: var(--cobalt); margin-bottom: 2px; }
+.pantry-group p { font-size: 0.95rem; }
+
+.pantry-add { display: flex; gap: 8px; }
+.pantry-add input { flex: 1; min-width: 0; font: inherit; color: var(--ink); padding: 10px 14px; border: 2px solid var(--sky); border-radius: 12px; }
+.pantry-add input:focus { border-color: var(--cobalt); outline: none; box-shadow: 0 0 0 3px var(--ice); }
+.pantry-add .button { margin-top: 0; }
+.pantry-suggest { display: flex; flex-wrap: wrap; gap: 8px; }
+.pantry-fresh { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 6px; }
+.pantry-fresh li { display: flex; align-items: center; gap: 12px; background: var(--ice); border-radius: 12px; padding: 8px 8px 8px 14px; }
+.pantry-fresh-name { font-weight: 700; flex: 1; min-width: 0; }
+.pantry-fresh-when { color: var(--muted); font-size: 0.88rem; }
+.pantry-remove { width: 32px; height: 32px; border-radius: 50%; border: 2px solid var(--sky); background: var(--white); color: var(--muted); font-size: 1.1rem; line-height: 1; cursor: pointer; flex: none; }
+.pantry-remove:hover { border-color: var(--danger); color: var(--danger); }
+
+.pantry-quiz { background: var(--white); border: 2px solid var(--cobalt); border-radius: 22px; padding: 22px 24px; display: grid; gap: 14px; }
+.pantry-quiz-top { display: flex; justify-content: space-between; align-items: center; }
+.pantry-step { font-weight: 700; color: var(--cobalt); font-size: 0.92rem; }
+.pantry-quiz h2 { font-weight: 800; font-size: clamp(1.5rem, 3.4vw, 2rem); line-height: 1.15; }
+.pantry-quick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.pantry-quiz-nav { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 8px; padding-top: 16px; border-top: 2px solid var(--ice); }
+.pantry-quiz-nav .button { margin-top: 0; }
+.pantry-count { color: var(--muted); font-size: 0.9rem; font-weight: 700; }

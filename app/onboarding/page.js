@@ -1,15 +1,13 @@
-import { redirect } from "next/navigation";
 import Brand from "../Brand";
 import Onboarding from "./Onboarding";
 import "./onboarding.css";
-import { getCurrentUser } from "../../lib/auth";
+import { requireMember } from "../../lib/auth";
 import { getProfile } from "../../lib/profile";
 
 export const metadata = { title: "Your kitchen profile · ChatEAT" };
 
 export default async function OnboardingPage() {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  const user = await requireMember();
   const profile = await getProfile(user.id);
 
   return (

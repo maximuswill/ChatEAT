@@ -1,17 +1,15 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import AppBar from "../AppBar";
 import RecipeCard from "../RecipeCard";
 import { removeSavedRecipe } from "../actions";
-import { getCurrentUser } from "../../lib/auth";
+import { requireMember } from "../../lib/auth";
 import { sql } from "../../lib/db";
 import "../cook/cook.css";
 
 export const metadata = { title: "Cookbook · ChatEAT" };
 
 export default async function CookbookPage() {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  const user = await requireMember();
   const rows = await sql`select id, recipe from saved_recipes where user_id = ${user.id} order by created_at desc`;
 
   return (

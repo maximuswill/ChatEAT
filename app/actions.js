@@ -8,6 +8,9 @@ import { getProfile } from "../lib/profile";
 import { generateRecipeIdeas, personalizeFromRequest, personalizeRecipe, refineRecipe, RecipeError } from "../lib/recipe-ai";
 import { describesSpecificMeal, findLibraryDish } from "../lib/library/search.js";
 import { hardRules } from "../lib/allergens";
+import { keepDays, lookupFresh, STAPLE_CATEGORIES } from "../lib/pantry-data.js";
+import { pantryNames } from "../lib/pantry.js";
+import { REQUIRE_SUBSCRIPTION, siteUrl, stripe } from "../lib/billing";
 
 // AI requests allowed per person in any rolling 7 days. Library answers are free and don't count.
 const WEEKLY_AI_LIMIT = 50;
@@ -47,7 +50,7 @@ export async function signUp(_previous, formData) {
   }
 
   await createSession(created[0].id);
-  redirect("/onboarding");
+  redirect(REQUIRE_SUBSCRIPTION ? "/subscribe" : "/onboarding");
 }
 
 export async function logIn(_previous, formData) {
@@ -121,6 +124,7 @@ export async function generateRecipes({ request, avoidTitles = [] }) {
   if (text.length < 3) return { error: "Tell ChatEAT a little about what you want first." };
 
   const { data } = await getProfile(user.id);
+  data.pantry = await pantryNames(user.id);
   const titles = (Array.isArray(avoidTitles) ? avoidTitles : []).map((t) => String(t).slice(0, 120)).slice(0, 30);
   try {
     // Library answers are free and unlimited. Only requests that use the AI count toward the daily limit.
@@ -147,6 +151,7 @@ async function personalRequest(label, run) {
   if (!user.has_paid_access) return { error: "\"Make it mine\" is part of the paid plan." };
   if ((await aiUsesThisWeek(user.id)) >= WEEKLY_AI_LIMIT) return { error: `You've used all ${WEEKLY_AI_LIMIT} of this week's AI requests. Library recipes still work, and AI requests free up as the week rolls on.` };
   const { data } = await getProfile(user.id);
+  data.pantry = await pantryNames(user.id);
   try {
     const result = await run(data);
     await sql`insert into recipe_requests (user_id, request, mode) values (${user.id}, ${label.slice(0, 380)}, 'ai')`;
@@ -203,4 +208,87 @@ export async function removeSavedRecipe(id) {
   if (!user) redirect("/login");
   await sql`delete from saved_recipes where id = ${Number(id)} and user_id = ${user.id}`;
   redirect("/cookbook");
+}
+
+// ---------- My pantry ----------
+
+const ALL_STAPLES = new Set(STAPLE_CATEGORIES.flatMap((c) => c.items));
+
+export async function savePantryStaples(items) {
+  const user = await getCurrentUser();
+  if (!user) return { error: "You're logged out. Log in again." };
+  const clean = [...new Set((Array.isArray(items) ? items : []).filter((i) => ALL_STAPLES.has(i)))];
+  await sql`
+    insert into pantry_staples (user_id, items, updated_at) values (${user.id}, ${JSON.stringify(clean)}::jsonb, now())
+    on conflict (user_id) do update set items = excluded.items, updated_at = now()`;
+  return { ok: true, count: clean.length };
+}
+
+export async function addFreshItems(names) {
+  const user = await getCurrentUser();
+  if (!user) return { error: "You're logged out. Log in again." };
+  const list = (Array.isArray(names) ? names : [names]).map((n) => String(n ?? "").trim()).filter((n) => n.length >= 2).slice(0, 20);
+  if (!list.length) return { error: "Type an item first, like chicken or bacon." };
+  const [{ count }] = await sql`select count(*)::int as count from pantry_items where user_id = ${user.id} and remove_at > now()`;
+  if (count + list.length > 100) return { error: "Your fresh list is full. Remove a few items first." };
+  const added = [];
+  for (const typed of list) {
+    const { name, days } = lookupFresh(typed);
+    const hours = Math.round(keepDays(days) * 24);
+    const [row] = await sql`
+      insert into pantry_items (user_id, name, remove_at)
+      values (${user.id}, ${name}, now() + make_interval(hours => ${hours}::int))
+      returning id, name, added_at`;
+    added.push({ id: Number(row.id), name: row.name, addedAt: new Date(row.added_at).toISOString() });
+  }
+  return { ok: true, added };
+}
+
+export async function removeFreshItem(id) {
+  const user = await getCurrentUser();
+  if (!user) return { error: "You're logged out. Log in again." };
+  await sql`delete from pantry_items where id = ${Number(id)} and user_id = ${user.id}`;
+  return { ok: true };
+}
+
+// ---------- Subscriptions (Stripe Checkout) ----------
+
+export async function startCheckout() {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  if (user.has_paid_access) redirect("/dashboard");
+
+  const s = stripe();
+  let customerId = user.stripe_customer_id;
+  if (!customerId) {
+    const customer = await s.customers.create({ email: user.email, metadata: { chateat_user_id: String(user.id) } });
+    customerId = customer.id;
+    await sql`update users set stripe_customer_id = ${customerId} where id = ${user.id}`;
+  }
+  const base = await siteUrl();
+  const session = await s.checkout.sessions.create({
+    mode: "subscription",
+    customer: customerId,
+    client_reference_id: String(user.id),
+    line_items: [{ price: process.env.STRIPE_PRICE_ID, quantity: 1 }],
+    success_url: `${base}/subscribe/success?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${base}/subscribe?canceled=1`,
+  });
+  redirect(session.url);
+}
+
+// Stripe's own page for updating a card or canceling.
+export async function openBillingPortal() {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  if (!user.stripe_customer_id) redirect("/dashboard");
+  let url;
+  try {
+    const portal = await stripe().billingPortal.sessions.create({ customer: user.stripe_customer_id, return_url: `${await siteUrl()}/dashboard` });
+    url = portal.url;
+  } catch (error) {
+    console.error("Billing portal failed", error?.message);
+    redirect("/dashboard?billing=unavailable");
+  }
+  redirect(url);
 }

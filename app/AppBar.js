@@ -7,6 +7,7 @@ export default function AppBar({ email, current }) {
   const links = [
     ["/dashboard", "My kitchen"],
     ["/cook", "What should I make?"],
+    ["/pantry", "My pantry"],
     ["/cookbook", "Cookbook"],
   ];
   return (

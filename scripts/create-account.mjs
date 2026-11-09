@@ -24,12 +24,13 @@ const password = `${words[kind]}-${randomBytes(4).toString("hex")}`;
 const sql = neon(process.env.DATABASE_URL);
 const passwordHash = await hashPassword(password);
 const rows = await sql`
-  insert into users (email, password_hash, email_verified, has_paid_access)
-  values (${email}, ${passwordHash}, true, true)
+  insert into users (email, password_hash, email_verified, has_paid_access, comp_access)
+  values (${email}, ${passwordHash}, true, true, true)
   on conflict (email) do update
     set password_hash = excluded.password_hash,
         email_verified = true,
-        has_paid_access = true
+        has_paid_access = true,
+        comp_access = true
   returning (xmax = 0) as created`;
 
 const note = kind === "personal" ? "Your personal account. Temporary password: change it once that option exists." : "Test account for trying features.";

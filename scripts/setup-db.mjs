@@ -86,17 +86,44 @@ await sql`
   )`;
 await sql`create index if not exists ai_usage_created_idx on ai_usage (created_at)`;
 
+// "My pantry": staples from the tap quiz (kept until removed) and fresh items (removed automatically).
+await sql`
+  create table if not exists pantry_staples (
+    user_id bigint primary key references users(id) on delete cascade,
+    items jsonb not null default '[]'::jsonb,
+    updated_at timestamptz not null default now()
+  )`;
+await sql`
+  create table if not exists pantry_items (
+    id bigint generated always as identity primary key,
+    user_id bigint not null references users(id) on delete cascade,
+    name text not null,
+    added_at timestamptz not null default now(),
+    remove_at timestamptz not null
+  )`;
+await sql`create index if not exists pantry_items_user_idx on pantry_items (user_id, remove_at)`;
+await sql`delete from pantry_items where remove_at < now()`;
+
+// Billing. Paid access = complimentary access (staff, demo and test accounts) OR an active Stripe subscription.
+await sql`alter table users add column if not exists comp_access boolean not null default false`;
+await sql`alter table users add column if not exists stripe_customer_id text`;
+await sql`alter table users add column if not exists stripe_subscription_id text`;
+await sql`alter table users add column if not exists subscription_status text`;
+// Accounts given full access before billing existed keep it for free.
+await sql`update users set comp_access = true where has_paid_access = true and comp_access = false`;
+
 // Grader demo account, required by the assignment: verified and with full paid access.
 const DEMO_EMAIL = "demo@demo.com";
 const DEMO_PASSWORD = "password123!";
 const demoHash = await hashPassword(DEMO_PASSWORD);
 await sql`
-  insert into users (email, password_hash, email_verified, has_paid_access)
-  values (${DEMO_EMAIL}, ${demoHash}, true, true)
+  insert into users (email, password_hash, email_verified, has_paid_access, comp_access)
+  values (${DEMO_EMAIL}, ${demoHash}, true, true, true)
   on conflict (email) do update
     set password_hash = excluded.password_hash,
         email_verified = true,
-        has_paid_access = true`;
+        has_paid_access = true,
+        comp_access = true`;
 
 const [{ count }] = await sql`select count(*)::int as count from users`;
-console.log(`Database ready. Tables: users, sessions, profiles, saved_recipes, recipe_requests, library_recipes, ai_usage. Demo account ready. Total accounts: ${count}.`);
+console.log(`Database ready. Tables: users, sessions, profiles, saved_recipes, recipe_requests, library_recipes, ai_usage, pantry_staples, pantry_items. Demo account ready. Total accounts: ${count}.`);
