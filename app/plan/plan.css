@@ -1,0 +1,72 @@
+/* Plan my week. Colors come from app/globals.css; form and recipe styles from app/cook/cook.css. */
+.plan { max-width: 1240px; }
+.plan h1 { font-weight: 800; font-size: clamp(2rem, 4.4vw, 2.8rem); line-height: 1.1; margin-bottom: 10px; }
+.plan .cook-form { max-width: 920px; }
+.plan .notice a { color: var(--cobalt); }
+.plan-start { display: flex; align-items: center; gap: 8px; font-weight: 700; }
+.plan-start select { font: inherit; color: var(--ink); padding: 8px 10px; border: 2px solid var(--sky); border-radius: 10px; background: var(--white); }
+
+.plan-result { margin-top: 30px; }
+.plan-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px 16px; }
+.plan-head h2 { font-size: 1.4rem; font-weight: 800; }
+.plan-head h2 span { color: var(--muted); font-weight: 600; font-size: 1rem; margin-left: 6px; }
+.plan-save { color: var(--muted); font-size: 0.9rem; font-weight: 700; }
+.plan-legend { color: var(--muted); font-size: 0.92rem; margin: 4px 0 14px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.plan-pin-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--yolk); border: 2px solid var(--ink); flex: none; }
+
+/* The calendar: seven columns on wide screens, one day per row on phones. */
+.plan-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 1100px) { .plan-week { grid-template-columns: minmax(0, 1fr); } }
+.plan-day { background: var(--white); border: 2px solid var(--sky); border-radius: 16px; padding: 10px; display: grid; gap: 8px; align-content: start; }
+.plan-day.today { border-color: var(--cobalt); }
+.plan-day-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; }
+.plan-day-head span { color: var(--muted); font-size: 0.88rem; }
+.plan-busy { flex-basis: 100%; font-style: normal; font-size: 0.8rem; font-weight: 700; color: var(--danger); }
+.plan-slot { font: inherit; text-align: left; display: grid; gap: 2px; width: 100%; padding: 8px 10px; border-radius: 12px; cursor: pointer; color: var(--ink); }
+.plan-slot.open { background: var(--white); border: 2px dashed var(--sky); }
+.plan-slot.filled { background: var(--ice); border: 2px solid var(--ice); }
+.plan-slot.pinned { border: 2px solid var(--yolk); background: #fffbea; }
+.plan-slot:hover, .plan-slot[aria-pressed="true"] { border-color: var(--cobalt); }
+.plan-slot[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--ice); }
+.plan-slot-meal { font-size: 0.78rem; font-weight: 700; color: var(--cobalt); text-transform: uppercase; letter-spacing: 0.03em; }
+.plan-slot-title { font-weight: 700; font-size: 0.92rem; line-height: 1.25; }
+.plan-slot-note { font-size: 0.8rem; color: var(--muted); line-height: 1.25; }
+.plan-slot-add { font-size: 0.88rem; color: var(--muted); }
+@media (max-width: 1100px) {
+  .plan-day { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  .plan-day-head { grid-column: 1 / -1; }
+}
+
+/* The picker under the calendar */
+.plan-picker { margin-top: 20px; background: var(--white); border: 2px solid var(--cobalt); border-radius: 22px; padding: 20px 22px; scroll-margin-top: 16px; }
+.plan-picker-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.plan-picker-head h2 { font-size: 1.3rem; font-weight: 800; }
+.plan-close { font: inherit; font-weight: 700; color: var(--cobalt); background: none; border: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 4px; }
+.plan-picker-note { display: flex; align-items: center; gap: 8px; font-weight: 700; margin-top: 6px; }
+.plan-current { margin-top: 14px; }
+.plan-current-text { margin-top: 12px; }
+.plan-picker-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 14px; }
+.plan-picker-actions .button { margin-top: 0; }
+.plan-options-title { font-size: 1.1rem; font-weight: 800; margin: 20px 0 10px; }
+.plan-options { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.plan-option { border: 2px solid var(--ice); border-radius: 14px; padding: 10px 12px; }
+.plan-option-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.plan-option-row > div:first-child { display: grid; gap: 2px; min-width: 0; }
+.plan-option-meta { color: var(--muted); font-size: 0.88rem; }
+.plan-option-why { color: var(--muted); font-size: 0.88rem; font-style: italic; }
+.plan-option-buttons { display: flex; gap: 8px; flex: none; }
+.plan-option-buttons .button { margin-top: 0; }
+@media (max-width: 560px) { .plan-option-row { flex-direction: column; align-items: flex-start; } }
+.plan-preview { margin-top: 10px; }
+
+/* Grocery list */
+.plan-groceries { margin-top: 24px; background: var(--white); border: 2px solid var(--sky); border-radius: 22px; padding: 20px 22px; max-width: 920px; }
+.plan-groceries h2 { font-size: 1.3rem; font-weight: 800; margin-bottom: 4px; }
+.plan-grocery-list { list-style: none; margin: 12px 0 0; padding: 0; columns: 2 220px; column-gap: 24px; }
+.plan-grocery-list li { break-inside: avoid; padding: 4px 0; }
+.plan-grocery-list label { display: flex; gap: 8px; align-items: baseline; cursor: pointer; }
+.plan-grocery-list label:has(input:checked) { color: var(--muted); text-decoration: line-through; }
+.plan-grocery-list span { color: var(--muted); font-size: 0.85rem; }
+.plan-have { margin-top: 14px; color: var(--muted); }
+.plan-have summary { cursor: pointer; font-weight: 700; color: var(--cobalt); }
+.plan-have p { margin-top: 6px; font-size: 0.92rem; }

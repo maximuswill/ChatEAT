@@ -11,9 +11,7 @@ import { hardRules } from "../lib/allergens";
 import { keepDays, lookupFresh, STAPLE_CATEGORIES } from "../lib/pantry-data.js";
 import { pantryNames } from "../lib/pantry.js";
 import { REQUIRE_SUBSCRIPTION, siteUrl, stripe } from "../lib/billing";
-
-// AI requests allowed per person in any rolling 7 days. Library answers are free and don't count.
-const WEEKLY_AI_LIMIT = 50;
+import { aiUsesThisWeek, WEEKLY_AI_LIMIT } from "../lib/ai-budget";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD = 8;
@@ -137,11 +135,6 @@ export async function generateRecipes({ request, avoidTitles = [] }) {
     console.error("Recipe generation failed", error);
     return { error: "Something went wrong getting recipes. Please try again." };
   }
-}
-
-async function aiUsesThisWeek(userId) {
-  const [{ count }] = await sql`select count(*)::int as count from recipe_requests where user_id = ${userId} and mode = 'ai' and created_at > now() - interval '7 days'`;
-  return count;
 }
 
 // Shared checks for every personal (AI) recipe request.

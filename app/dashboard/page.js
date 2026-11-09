@@ -49,7 +49,7 @@ export default async function DashboardPage({ searchParams }) {
             <section className="app-card">
               <h2>Plan my week</h2>
               <p>Tell ChatEAT about your week and get a calendar of meals, lunches and snacks.</p>
-              <span className="soon">Coming soon</span>
+              <Link className="button primary small" href="/plan">Plan my week</Link>
             </section>
             <section className="app-card">
               <h2>What should I make?</h2>

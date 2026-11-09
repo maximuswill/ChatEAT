@@ -104,6 +104,15 @@ await sql`
 await sql`create index if not exists pantry_items_user_idx on pantry_items (user_id, remove_at)`;
 await sql`delete from pantry_items where remove_at < now()`;
 
+// "Plan my week": each person's current weekly plan (calendar slots, options pool and chosen meals) as JSON.
+await sql`
+  create table if not exists meal_plans (
+    user_id bigint primary key references users(id) on delete cascade,
+    week_start date not null,
+    plan jsonb not null,
+    updated_at timestamptz not null default now()
+  )`;
+
 // Billing. Paid access = complimentary access (staff, demo and test accounts) OR an active Stripe subscription.
 await sql`alter table users add column if not exists comp_access boolean not null default false`;
 await sql`alter table users add column if not exists stripe_customer_id text`;
@@ -126,4 +135,4 @@ await sql`
         comp_access = true`;
 
 const [{ count }] = await sql`select count(*)::int as count from users`;
-console.log(`Database ready. Tables: users, sessions, profiles, saved_recipes, recipe_requests, library_recipes, ai_usage, pantry_staples, pantry_items. Demo account ready. Total accounts: ${count}.`);
+console.log(`Database ready. Tables: users, sessions, profiles, saved_recipes, recipe_requests, library_recipes, ai_usage, pantry_staples, pantry_items, meal_plans. Demo account ready. Total accounts: ${count}.`);
