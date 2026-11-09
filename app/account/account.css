@@ -1,0 +1,15 @@
+/* Account page. Colors come from app/globals.css. */
+.account { max-width: 720px; display: grid; gap: 18px; }
+.account h1 { font-weight: 800; font-size: clamp(2rem, 4.4vw, 2.8rem); line-height: 1.1; }
+.account-card { background: var(--white); border: 2px solid var(--sky); border-radius: 22px; padding: 22px 24px; display: grid; gap: 12px; justify-items: start; }
+.account-card h2 { font-weight: 800; font-size: 1.3rem; }
+.account-card .button { margin-top: 0; }
+.account-card form { margin: 0; }
+.account-facts { margin: 0; display: grid; gap: 4px; }
+.account-facts div { display: flex; flex-wrap: wrap; gap: 8px; }
+.account-facts dt { font-weight: 700; min-width: 64px; }
+.account-facts dd { margin: 0; color: var(--muted); overflow-wrap: anywhere; }
+.account-note { color: var(--muted); font-size: 0.95rem; }
+.account-form { width: 100%; max-width: 420px; display: grid; gap: 4px; }
+.account-form .button { justify-self: start; margin-top: 4px; }
+.account-form .notice { margin-bottom: 12px; }

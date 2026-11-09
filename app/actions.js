@@ -281,14 +281,14 @@ export async function startCheckout() {
 export async function openBillingPortal() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!user.stripe_customer_id) redirect("/dashboard");
+  if (!user.stripe_customer_id) redirect("/account");
   let url;
   try {
-    const portal = await stripe().billingPortal.sessions.create({ customer: user.stripe_customer_id, return_url: `${await siteUrl()}/dashboard` });
+    const portal = await stripe().billingPortal.sessions.create({ customer: user.stripe_customer_id, return_url: `${await siteUrl()}/account` });
     url = portal.url;
   } catch (error) {
     console.error("Billing portal failed", error?.message);
-    redirect("/dashboard?billing=unavailable");
+    redirect("/account?billing=unavailable");
   }
   redirect(url);
 }

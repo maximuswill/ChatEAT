@@ -23,6 +23,7 @@ export default function AppBar({ email, current }) {
         </div>
         <div className="nav-account">
           <span className="who-am-i">{email}</span>
+          <Link className={`button secondary small account-link ${current === "/account" ? "current" : ""}`} href="/account" aria-current={current === "/account" ? "page" : undefined}>Account</Link>
           <form action={logOut}>
             <button className="button secondary small" type="submit">Log out</button>
           </form>
