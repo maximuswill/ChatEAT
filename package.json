@@ -6,9 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "db:setup": "node --env-file-if-exists=.env.local scripts/setup-db.mjs"
+    "db:setup": "node --env-file-if-exists=.env.local scripts/setup-db.mjs",
+    "account:create": "node --env-file-if-exists=.env.local scripts/create-account.mjs",
+    "ai:spend": "node --env-file-if-exists=.env.local scripts/ai-spend.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.6.0",
     "@neondatabase/serverless": "^1.2.0",
     "next": "^16.4.5",
     "react": "^19.3.1",

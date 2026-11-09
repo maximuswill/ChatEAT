@@ -212,3 +212,16 @@ footer a { font-weight: 700; color: var(--white); text-underline-offset: 3px; }
 .app-card p { color: var(--muted); }
 .soon { display: inline-block; margin-top: 16px; font-weight: 700; font-size: 0.85rem; color: var(--cobalt); background: var(--ice); padding: 3px 11px; border-radius: 999px; }
 @media (max-width: 560px) { .app-bar .who-am-i { display: none; } }
+.app-bar-left { display: flex; align-items: center; gap: 28px; min-width: 0; }
+.app-bar-links { display: flex; flex-wrap: wrap; gap: 4px 20px; }
+.app-bar-links a { color: var(--ice); font-weight: 700; font-size: 0.95rem; text-decoration: none; padding: 4px 0; }
+.app-bar-links a:hover, .app-bar-links a[aria-current="page"] { color: var(--white); text-decoration: underline; text-decoration-color: var(--yolk); text-decoration-thickness: 3px; text-underline-offset: 6px; }
+@media (max-width: 860px) { .app-bar .nav { flex-wrap: wrap; } .app-bar-left { flex-wrap: wrap; gap: 8px 20px; } }
+.notice { background: var(--white); border: 2px solid var(--cobalt); border-radius: 14px; padding: 12px 16px; font-weight: 700; margin-bottom: 20px; }
+.app-card.profile-card { border-color: var(--yolk); background: #fffbea; }
+.app-card .button { margin-top: 18px; }
+.profile-facts { margin: 12px 0 0; display: grid; gap: 4px; font-size: 0.95rem; }
+.profile-facts div { display: flex; gap: 6px; flex-wrap: wrap; }
+.profile-facts dt { font-weight: 700; color: var(--ink); }
+.profile-facts dd { margin: 0; color: var(--muted); }
+.profile-facts .danger dd { color: var(--danger); font-weight: 700; }

@@ -1,0 +1,87 @@
+/* Recipe generator and cookbook. Colors come from app/globals.css. */
+.cook { max-width: 920px; }
+.cook h1 { font-weight: 800; font-size: clamp(2rem, 4.4vw, 2.8rem); line-height: 1.1; margin-bottom: 10px; }
+.cook-intro { color: var(--muted); max-width: 40em; margin-bottom: 26px; }
+.cook .notice a { color: var(--cobalt); }
+
+.cook-form { background: var(--white); border: 2px solid var(--sky); border-radius: 22px; padding: 22px; display: grid; gap: 14px; }
+.cook-label { font-weight: 700; font-size: 1.1rem; }
+.cook-form textarea { font: inherit; color: var(--ink); padding: 14px; border: 2px solid var(--sky); border-radius: 14px; resize: vertical; width: 100%; }
+.cook-form textarea:focus { border-color: var(--cobalt); outline: none; box-shadow: 0 0 0 3px var(--ice); }
+.cook-ideas { display: flex; flex-wrap: wrap; gap: 8px; }
+.cook-idea { font: inherit; font-size: 0.88rem; font-weight: 700; padding: 6px 13px; border-radius: 999px; border: 2px solid var(--ice); background: var(--ice); color: var(--cobalt); cursor: pointer; }
+.cook-idea:hover { border-color: var(--cobalt); }
+.cook-submit { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; }
+.cook-rules { font-size: 0.9rem; color: var(--danger); }
+
+.cook-banner { margin-top: 18px; background: #fff8e1; border: 2px solid var(--yolk); border-radius: 14px; padding: 12px 16px; }
+.cook .form-error { margin-top: 18px; }
+.cook-loading { margin-top: 24px; display: flex; align-items: center; gap: 12px; font-weight: 700; color: var(--cobalt); }
+.cook-spinner { width: 22px; height: 22px; border-radius: 50%; border: 3px solid var(--sky); border-top-color: var(--cobalt); animation: cook-spin 0.8s linear infinite; }
+@keyframes cook-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .cook-spinner { animation-duration: 2.5s; } }
+
+.cook-results { margin-top: 30px; }
+.cook-results-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; }
+.cook-results-head h2 { font-size: 1.3rem; font-weight: 800; }
+.cook-results-head h2 span { color: var(--muted); font-weight: 600; }
+.cook-removed { background: var(--danger-bg); color: var(--danger); border-radius: 12px; padding: 10px 14px; font-weight: 700; font-size: 0.95rem; margin-bottom: 14px; }
+.cook-empty { color: var(--muted); }
+.cook-empty a { color: var(--cobalt); font-weight: 700; }
+.cook-list { display: grid; gap: 16px; }
+
+/* Recipe card */
+.recipe { background: var(--white); border: 2px solid var(--sky); border-radius: 22px; padding: 22px 24px; }
+.recipe.open { border-color: var(--cobalt); }
+.recipe-style { display: inline-block; background: var(--ice); color: var(--cobalt); font-weight: 700; font-size: 0.82rem; padding: 3px 11px; border-radius: 999px; margin-bottom: 8px; }
+.recipe h3 { font-weight: 800; font-size: 1.45rem; line-height: 1.15; margin-bottom: 6px; }
+.recipe-summary { color: var(--ink); }
+.recipe-why { color: var(--muted); font-size: 0.95rem; margin-top: 6px; }
+.recipe-meta { list-style: none; margin: 14px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.92rem; color: var(--muted); }
+.recipe-meta strong { color: var(--ink); }
+.recipe-body { margin-top: 20px; padding-top: 18px; border-top: 2px solid var(--ice); }
+.recipe-cols { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.3fr); gap: 28px; }
+@media (max-width: 720px) { .recipe-cols { grid-template-columns: minmax(0, 1fr); gap: 20px; } }
+.recipe h4 { font-family: var(--font-display), system-ui, sans-serif; font-size: 1.1rem; margin: 0 0 10px; }
+.recipe-ingredients { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.recipe-ingredients li { display: flex; justify-content: space-between; gap: 12px; padding-bottom: 6px; border-bottom: 1px solid var(--ice); }
+.recipe-ingredients li span:last-child { color: var(--muted); text-align: right; }
+.recipe-steps { margin: 0; padding-left: 1.3em; display: grid; gap: 10px; }
+.recipe-steps li::marker { font-weight: 800; color: var(--cobalt); }
+.recipe-extras { margin-top: 18px; background: var(--ice); border-radius: 14px; padding: 12px 16px; display: grid; gap: 6px; font-size: 0.95rem; }
+.recipe-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 18px; }
+.recipe-actions form { margin: 0; }
+.recipe-actions .button { margin-top: 0; }
+.recipe-error { color: var(--danger); font-weight: 700; font-size: 0.9rem; }
+
+/* Library origin, pairings, Make it mine */
+.recipe-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.recipe-badges .recipe-style { margin-bottom: 0; }
+.recipe-origin { display: inline-block; font-weight: 700; font-size: 0.82rem; padding: 3px 11px; border-radius: 999px; }
+.recipe-origin.library { background: var(--navy); color: var(--white); }
+.recipe-origin.ai { background: var(--yolk); color: var(--ink); }
+.recipe-origin.personal { background: var(--cobalt); color: var(--white); }
+.recipe-subhead { font-weight: 700; color: var(--cobalt); border-bottom: 0 !important; padding-top: 6px; }
+.recipe-source { margin-top: 14px; font-size: 0.88rem; color: var(--muted); }
+.recipe-source a { color: var(--cobalt); font-weight: 700; }
+.recipe-pairings { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 16px; }
+.recipe-pairings-label { font-weight: 700; font-size: 0.92rem; color: var(--muted); }
+.recipe-pairing { font: inherit; font-size: 0.9rem; font-weight: 700; padding: 6px 13px; border-radius: 999px; border: 2px solid var(--sky); background: var(--white); color: var(--cobalt); cursor: pointer; }
+.recipe-pairing:hover, .recipe-pairing[aria-pressed="true"] { border-color: var(--cobalt); background: var(--ice); }
+.recipe-pairing-card, .recipe-mine { margin-top: 14px; }
+.recipe.compact { border-width: 2px; border-style: dashed; padding: 18px; }
+.recipe.compact h3 { font-size: 1.2rem; }
+.recipe-mine > .recipe { border-color: var(--cobalt); box-shadow: 6px 6px 0 var(--ice); }
+
+/* Make it mine from the request box, and the change box */
+.cook-mine { margin-left: auto; }
+.cook-notice { background: #fff8e1; border: 2px solid var(--yolk); border-radius: 12px; padding: 10px 14px; font-weight: 700; font-size: 0.95rem; }
+@media (max-width: 560px) { .cook-mine { margin-left: 0; } }
+.personal { display: grid; gap: 12px; }
+.personal-note { color: var(--muted); font-weight: 700; font-size: 0.92rem; }
+.personal-change { background: var(--white); border: 2px dashed var(--cobalt); border-radius: 18px; padding: 16px 18px; display: grid; gap: 10px; }
+.personal-change-label { font-weight: 700; }
+.personal-change textarea { font: inherit; color: var(--ink); padding: 12px; border: 2px solid var(--sky); border-radius: 12px; resize: vertical; width: 100%; }
+.personal-change textarea:focus { border-color: var(--cobalt); outline: none; box-shadow: 0 0 0 3px var(--ice); }
+.personal-change-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.personal-change-actions .button { margin-top: 0; }
