@@ -4,7 +4,7 @@ import { getCurrentUser } from "../../lib/auth";
 import { sql } from "../../lib/db";
 import { AI_CREDIT_USD, isOwner } from "../../lib/owner";
 import { MONTHLY_BUDGET_USD } from "../../lib/ai-budget";
-import { CURATED } from "../../lib/library/index.js";
+import { BUILT_IN_ADDED, CURATED } from "../../lib/library/index.js";
 import { TIERS } from "../../lib/access-codes";
 import ResetRequest from "./ResetRequests";
 import "../account/account.css";
@@ -22,6 +22,8 @@ function ago(date) {
   if (minutes < 48 * 60) return `${Math.round(minutes / 60)} h ago`;
   return `${Math.round(minutes / 1440)} days ago`;
 }
+
+const time = (d) => new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
 
 const money = (n) => `$${Number(n).toFixed(2)}`;
 const day = (d) => new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/New_York" });
@@ -58,15 +60,20 @@ export default async function OwnerPage({ searchParams }) {
              (select count(*)::int from recipe_requests r where r.user_id = u.id and r.mode = 'ai' and r.created_at > now() - interval '30 days') as ai_30d,
              (select max(s.created_at) from sessions s where s.user_id = u.id) as last_login
       from users u order by u.created_at desc, u.id desc`,
-    sql`select recipe, created_at from library_recipes order by created_at desc`,
+    sql`select l.recipe, l.created_at, u.email as made_for from library_recipes l left join users u on u.id = l.created_by order by l.created_at desc`,
     sql`
       select r.id, r.user_id, r.created_at, u.email from password_reset_requests r join users u on u.id = r.user_id
       where r.handled_at is null order by r.created_at`,
   ]);
 
   const recipes = [
-    ...aiRows.map((row) => ({ ...row.recipe, origin: row.recipe.origin === "mine" ? "mine" : "ai", added: row.created_at })),
-    ...CURATED,
+    ...aiRows.map((row) => ({
+      ...row.recipe,
+      origin: row.recipe.origin === "mine" ? "mine" : "ai",
+      added: row.created_at,
+      madeBy: row.recipe.origin === "mine" ? `API request · Make it mine${row.made_for ? ` for ${row.made_for}` : ""}` : "API request",
+    })),
+    ...CURATED.map((r) => ({ ...r, added: `${r.added ?? BUILT_IN_ADDED}T12:00:00Z`, madeBy: "Built in Claude" })),
   ];
   const shown = recipes.filter((r) => {
     if (show === "library" && r.origin !== "library") return false;
@@ -145,7 +152,7 @@ export default async function OwnerPage({ searchParams }) {
 
           <section className="account-card">
             <h2>Recipe library</h2>
-            <p className="account-note">{CURATED.length} built-in · {aiRows.filter((r) => r.recipe.origin !== "mine").length} saved from AI answers · {aiRows.filter((r) => r.recipe.origin === "mine").length} Make it mine versions</p>
+            <p className="account-note">{CURATED.length} built-in · {aiRows.filter((r) => r.recipe.origin !== "mine").length} saved from AI answers · {aiRows.filter((r) => r.recipe.origin === "mine").length} Make it mine {aiRows.filter((r) => r.recipe.origin === "mine").length === 1 ? "version" : "versions"}</p>
             <form className="owner-search" method="get" action="/owner#library">
               <input type="search" name="q" defaultValue={q} placeholder="Search title, cuisine, tag…" aria-label="Search recipes" />
               <select name="show" defaultValue={show} aria-label="Which recipes">
@@ -155,7 +162,7 @@ export default async function OwnerPage({ searchParams }) {
               </select>
               <button className="button primary small" type="submit">Search</button>
             </form>
-            <p id="library" className="account-note">Showing {shown.length}</p>
+            <p id="library" className="account-note">Showing {shown.length}, newest first</p>
             <ul className="owner-recipes">
               {shown.map((r) => (
                 <li key={r.id}>
@@ -163,7 +170,8 @@ export default async function OwnerPage({ searchParams }) {
                     <summary>
                       <span className="owner-recipe-title">{r.title}</span>
                       <span className={`owner-tag ${r.origin === "library" ? "comp" : r.origin === "mine" ? "family" : "ai"}`}>{r.origin === "library" ? "Built-in" : r.origin === "mine" ? "Make it mine" : "AI-saved"}</span>
-                      <span className="owner-recipe-meta">{[r.course, r.cuisine, r.total_minutes && `${r.total_minutes} min`, r.added && `added ${day(r.added)}`].filter(Boolean).join(" · ")}</span>
+                      <span className="owner-recipe-meta">{[r.course, r.cuisine, r.total_minutes && `${r.total_minutes} min`].filter(Boolean).join(" · ")}</span>
+                      <span className="owner-recipe-made">Created {day(r.added)}{r.origin !== "library" ? `, ${time(r.added)}` : ""} · {r.madeBy}</span>
                     </summary>
                     <div className="owner-recipe-body">
                       {r.summary && <p>{r.summary}</p>}

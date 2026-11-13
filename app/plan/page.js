@@ -15,6 +15,10 @@ export default async function PlanPage() {
   const user = await requireMember();
   const profile = await getProfile(user.id);
   const [row] = await sql`select plan from meal_plans where user_id = ${user.id}`;
+  // Plans saved before the label change show library copies of AI recipes (ids "ai-...") as library recipes.
+  for (const recipe of Object.values(row?.plan?.recipes ?? {})) {
+    if (recipe.origin === "ai" && String(recipe.id).startsWith("ai-")) recipe.origin = "library";
+  }
 
   return (
     <>
