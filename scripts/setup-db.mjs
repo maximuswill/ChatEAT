@@ -118,6 +118,8 @@ await sql`alter table users add column if not exists comp_access boolean not nul
 await sql`alter table users add column if not exists stripe_customer_id text`;
 await sql`alter table users add column if not exists stripe_subscription_id text`;
 await sql`alter table users add column if not exists subscription_status text`;
+// Which friends & family code gave someone free access: 'family_full', 'family_limited' or null (see lib/access-codes.js).
+await sql`alter table users add column if not exists access_tier text`;
 // Accounts given full access before billing existed keep it for free.
 await sql`update users set comp_access = true where has_paid_access = true and comp_access = false`;
 

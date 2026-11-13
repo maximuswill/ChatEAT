@@ -3,6 +3,7 @@ import Brand from "../Brand";
 import { logOut, startCheckout } from "../actions";
 import { getCurrentUser } from "../../lib/auth";
 import { currentPlan, formatPrice } from "../../lib/billing";
+import RedeemCode from "./RedeemCode";
 import "./subscribe.css";
 
 export const metadata = { title: "Subscribe · ChatEAT" };
@@ -41,6 +42,7 @@ export default async function SubscribePage({ searchParams }) {
           <button className="button primary" type="submit">Subscribe for {formatPrice(plan)} a {plan.interval}</button>
         </form>
         <p className="sub-fine">Payments are handled securely by Stripe. ChatEAT never sees your card number.</p>
+        <RedeemCode />
         <form action={logOut} className="sub-logout">
           <span>Signed in as {user.email}.</span>
           <button type="submit" className="ob-link">Log out</button>

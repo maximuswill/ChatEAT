@@ -11,7 +11,8 @@ import { hardRules } from "../lib/allergens";
 import { keepDays, lookupFresh, STAPLE_CATEGORIES } from "../lib/pantry-data.js";
 import { pantryNames } from "../lib/pantry.js";
 import { REQUIRE_SUBSCRIPTION, siteUrl, stripe } from "../lib/billing";
-import { aiUsesThisWeek, WEEKLY_AI_LIMIT } from "../lib/ai-budget";
+import { aiAllowed, weeklyAiLimit } from "../lib/ai-budget";
+import { tierForCode } from "../lib/access-codes";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD = 8;
@@ -36,19 +37,36 @@ export async function signUp(_previous, formData) {
     return { error: "That password is too long.", email };
   }
 
+  // Optional friends & family code. A wrong code stops sign-up so nobody lands on the payment page by mistake.
+  const code = String(formData.get("code") ?? "").trim().slice(0, 100);
+  const tier = code ? tierForCode(code) : null;
+  if (code && !tier) {
+    return { error: "That friends & family code isn't valid. Check it, or leave it blank to sign up normally.", email, code };
+  }
+
   const passwordHash = await hashPassword(password);
   const created = await sql`
-    insert into users (email, password_hash)
-    values (${email}, ${passwordHash})
+    insert into users (email, password_hash, comp_access, access_tier)
+    values (${email}, ${passwordHash}, ${Boolean(tier)}, ${tier})
     on conflict (email) do nothing
     returning id`;
 
   if (created.length === 0) {
-    return { error: "An account with that email already exists. Try logging in.", email };
+    return { error: "An account with that email already exists. Try logging in.", email, code };
   }
 
   await createSession(created[0].id);
-  redirect(REQUIRE_SUBSCRIPTION ? "/subscribe" : "/onboarding");
+  redirect(REQUIRE_SUBSCRIPTION && !tier ? "/subscribe" : "/onboarding");
+}
+
+// "Have a friends & family code?" on the subscribe page, for people who signed up without one.
+export async function redeemCode(_previous, formData) {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const tier = tierForCode(String(formData.get("code") ?? "").slice(0, 100));
+  if (!tier) return { error: "That code isn't valid. Check it and try again." };
+  await sql`update users set comp_access = true, access_tier = ${tier} where id = ${user.id}`;
+  redirect("/onboarding");
 }
 
 export async function logIn(_previous, formData) {
@@ -126,7 +144,7 @@ export async function generateRecipes({ request, avoidTitles = [] }) {
   const titles = (Array.isArray(avoidTitles) ? avoidTitles : []).map((t) => String(t).slice(0, 120)).slice(0, 30);
   try {
     // Library answers are free and unlimited. Only requests that use the AI count toward the daily limit.
-    const allowAi = (await aiUsesThisWeek(user.id)) < WEEKLY_AI_LIMIT;
+    const allowAi = await aiAllowed(user);
     const result = await generateRecipeIdeas(text, data, titles, { allowAi });
     await sql`insert into recipe_requests (user_id, request, mode) values (${user.id}, ${text}, ${result.usedAi ? "ai" : "library"})`;
     return { ...result, limitReached: !allowAi };
@@ -142,7 +160,7 @@ async function personalRequest(label, run) {
   const user = await getCurrentUser();
   if (!user) return { error: "You're logged out. Log in again." };
   if (!user.has_paid_access) return { error: "\"Make it mine\" is part of the paid plan." };
-  if ((await aiUsesThisWeek(user.id)) >= WEEKLY_AI_LIMIT) return { error: `You've used all ${WEEKLY_AI_LIMIT} of this week's AI requests. Library recipes still work, and AI requests free up as the week rolls on.` };
+  if (!(await aiAllowed(user))) return { error: `You've used all ${await weeklyAiLimit(user)} of this week's AI requests. Library recipes still work, and AI requests free up as the week rolls on.` };
   const { data } = await getProfile(user.id);
   data.pantry = await pantryNames(user.id);
   try {

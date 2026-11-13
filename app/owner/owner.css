@@ -1,0 +1,39 @@
+/* Owner page. Builds on account.css; colors come from app/globals.css. */
+.owner { max-width: 960px; }
+.owner .account-card { justify-items: stretch; }
+.owner-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.owner-stat { display: grid; gap: 4px; background: var(--ice); border-radius: 16px; padding: 14px 16px; }
+.owner-stat-label { color: var(--muted); font-size: 0.9rem; font-weight: 700; }
+.owner-stat strong { font-size: 1.5rem; font-weight: 800; }
+.owner-stat-note { color: var(--muted); font-size: 0.85rem; }
+.owner-bar { display: block; height: 8px; border-radius: 99px; background: var(--white); overflow: hidden; }
+.owner-bar span { display: block; height: 100%; border-radius: 99px; background: #22a55b; }
+.owner-bar.mid span { background: var(--yolk); }
+.owner-bar.high span { background: var(--danger); }
+
+.owner-scroll { overflow-x: auto; }
+.owner-table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+.owner-table th { text-align: left; color: var(--muted); font-size: 0.85rem; padding: 6px 10px 6px 0; border-bottom: 2px solid var(--sky); white-space: nowrap; }
+.owner-table td { padding: 8px 10px 8px 0; border-bottom: 1px solid var(--ice); white-space: nowrap; }
+.owner-table td.owner-email { white-space: normal; overflow-wrap: anywhere; min-width: 160px; }
+
+.owner-tag { display: inline-block; font-size: 0.78rem; font-weight: 700; padding: 2px 9px; border-radius: 99px; background: var(--ice); color: var(--muted); }
+.owner-tag.owner { background: var(--yolk); color: var(--ink); }
+.owner-tag.paid { background: #dcf7e6; color: #136c3a; }
+.owner-tag.family { background: #ffe9f1; color: #9b1d4f; }
+.owner-tag.ai { background: var(--cobalt); color: var(--white); }
+
+.owner-search { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.owner-search input, .owner-search select { font: inherit; padding: 8px 12px; border: 2px solid var(--sky); border-radius: 12px; background: var(--white); color: var(--ink); }
+.owner-search input { flex: 1 1 220px; min-width: 0; }
+.owner-search .button { margin-top: 0; }
+
+.owner-recipes { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.owner-recipes > li { border: 1px solid var(--ice); border-radius: 12px; }
+.owner-recipes summary { cursor: pointer; padding: 10px 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.owner-recipe-title { font-weight: 700; }
+.owner-recipe-meta { color: var(--muted); font-size: 0.85rem; flex-basis: 100%; }
+.owner-recipe-body { padding: 0 14px 14px; display: grid; gap: 6px; }
+.owner-recipe-body h3 { font-size: 1rem; font-weight: 800; margin-top: 6px; }
+.owner-recipe-body ul, .owner-recipe-body ol { margin: 0; padding-left: 20px; display: grid; gap: 2px; }
+.owner-recipe-body p { margin: 0; color: var(--muted); }

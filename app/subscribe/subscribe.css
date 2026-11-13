@@ -13,3 +13,11 @@
 .sub-fine { color: var(--muted); font-size: 0.88rem; text-align: center; }
 .sub-logout { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; color: var(--muted); font-size: 0.9rem; }
 .sub-logout .ob-link { background: none; border: 0; padding: 0; font: inherit; font-weight: 700; color: var(--cobalt); text-decoration: underline; text-underline-offset: 4px; cursor: pointer; }
+.sub-code-toggle { margin: 0 auto; }
+.sub-code { display: grid; gap: 6px; border-top: 2px solid var(--ice); padding-top: 14px; }
+.sub-code label { font-weight: 700; font-size: 0.95rem; }
+.sub-code .form-error { margin-bottom: 4px; }
+.sub-code-row { display: flex; gap: 8px; }
+.sub-code-row input { flex: 1 1 auto; width: 100%; min-width: 0; font: inherit; padding: 10px 14px; border: 2px solid var(--sky); border-radius: 12px; }
+.sub-code-row input:focus { border-color: var(--cobalt); outline: none; box-shadow: 0 0 0 3px var(--ice); }
+.sub-code-row .button { margin-top: 0; width: auto; flex: none; }

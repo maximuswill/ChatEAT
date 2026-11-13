@@ -4,7 +4,7 @@ import { sql } from "../../lib/db";
 import { getCurrentUser } from "../../lib/auth";
 import { getProfile } from "../../lib/profile";
 import { pantryNames } from "../../lib/pantry";
-import { aiUsesThisWeek, WEEKLY_AI_LIMIT } from "../../lib/ai-budget";
+import { aiAllowed } from "../../lib/ai-budget";
 import { buildPlan, MEAL_QUERY, PREP_QUERY, recipeId } from "../../lib/planner";
 import { generateRecipeIdeas, RecipeError } from "../../lib/recipe-ai";
 
@@ -42,7 +42,7 @@ export async function makePlan({ text, start }) {
   if (!ISO_DATE.test(String(start))) return { error: "Pick a start day first." };
   try {
     const profile = await profileWithPantry(user.id);
-    const allowAi = (await aiUsesThisWeek(user.id)) < WEEKLY_AI_LIMIT;
+    const allowAi = await aiAllowed(user);
     const plan = await buildPlan({ text: week, start, profile, allowAi });
     if (plan.usedAi) await sql`insert into recipe_requests (user_id, request, mode) values (${user.id}, ${`plan: ${week}`.slice(0, 380)}, 'ai')`;
     await storePlan(user.id, plan);
@@ -81,7 +81,7 @@ export async function moreIdeas(meal, prepAhead = false) {
   if (!plan || !plan.meals.includes(meal)) return { error: "Plan your week first." };
   try {
     const profile = await profileWithPantry(user.id);
-    const allowAi = (await aiUsesThisWeek(user.id)) < WEEKLY_AI_LIMIT;
+    const allowAi = await aiAllowed(user);
     const request = prepAhead ? `${PREP_QUERY} ${MEAL_QUERY[meal]}` : MEAL_QUERY[meal];
     const titles = Object.values(plan.recipes).map((r) => r.title).slice(0, 60);
     const result = await generateRecipeIdeas(request, profile, titles, { allowAi });
