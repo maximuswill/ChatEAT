@@ -134,7 +134,9 @@ const CONTENT = {
   footer: {
     credit: `Built by Maximus Williams`,
     contactLabel: `Questions or feedback:`,
-    contactEmail: `maximuswilliams340@gmail.com`,
+    // Leave empty to hide the "Questions or feedback" line. This file is public on GitHub,
+    // so use a dedicated contact address here, not a personal one.
+    contactEmail: ``,
   },
 };
 
