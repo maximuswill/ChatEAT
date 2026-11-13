@@ -22,7 +22,7 @@ export default async function PlanPage() {
       <main className="app-main">
         <div className="container plan">
           <h1>Plan my week</h1>
-          <p className="cook-intro">Tell ChatEAT what your week looks like. Meals with a reason get pinned to their day; everything else is yours to fill from this week&apos;s options. They&apos;re suggestions, so swap or clear anything.</p>
+          <p className="cook-intro">Tell ChatEAT what your week looks like. Meals with a reason go on their day, and every breakfast, lunch and dinner gets filled in. They&apos;re all suggestions, so swap, clear or make a recipe for any meal.</p>
           {!user.has_paid_access ? (
             <p className="notice">Plan my week is part of the paid plan.</p>
           ) : (

@@ -6,6 +6,7 @@ import { getProfile } from "../../lib/profile";
 import { pantryNames } from "../../lib/pantry";
 import { aiAllowed } from "../../lib/ai-budget";
 import { buildPlan, MEAL_QUERY, PREP_QUERY, recipeId } from "../../lib/planner";
+import { slotSource } from "../../lib/plan-shared";
 import { generateRecipeIdeas, RecipeError } from "../../lib/recipe-ai";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -66,7 +67,7 @@ export async function saveSlots(slots) {
     const id = slot.recipeId && plan.recipes[slot.recipeId] ? slot.recipeId : null;
     const note = String(slot.note ?? "").slice(0, 60);
     if (!id && !slot.leftovers && !note) continue;
-    clean[`${Number(day)}|${meal}`] = { recipeId: id, leftovers: Boolean(slot.leftovers) && !id, pinned: Boolean(slot.pinned), note };
+    clean[`${Number(day)}|${meal}`] = { recipeId: id, leftovers: Boolean(slot.leftovers) && !id, pinned: Boolean(slot.pinned), note, source: slotSource(slot) };
   }
   plan.slots = clean;
   await storePlan(user.id, plan);
@@ -100,5 +101,49 @@ export async function moreIdeas(meal, prepAhead = false) {
     if (e instanceof RecipeError) return { error: e.message };
     console.error("More plan ideas failed", e);
     return { error: "Couldn't get more ideas. Please try again." };
+  }
+}
+
+// "Make a recipe for this meal": the person describes what they want for one slot (Tuesday dinner).
+// The library is searched first; the AI writes new recipes only when nothing fits (one AI request).
+// The best match goes in the slot (green, since they asked for it) and the runners-up become swap options.
+export async function recipeForSlot({ key, text }) {
+  const { user, error } = await member();
+  if (error) return { error };
+  const plan = await loadPlan(user.id);
+  if (!plan) return { error: "Plan your week first." };
+  const [day, meal] = String(key).split("|");
+  if (!(Number(day) >= 0 && Number(day) < 7) || !plan.meals.includes(meal)) return { error: "Pick a meal on the calendar first." };
+  const wish = String(text ?? "").trim().slice(0, 300);
+  if (wish.length < 3) return { error: "Tell ChatEAT a little about what you want for this meal." };
+
+  try {
+    const profile = await profileWithPantry(user.id);
+    const allowAi = await aiAllowed(user);
+    const result = await generateRecipeIdeas(`${wish} ${MEAL_QUERY[meal]}`, profile, [], { allowAi });
+    if (!result.recipes.length) return { error: "ChatEAT couldn't find a recipe for that. Try describing it differently." };
+    if (result.usedAi) await sql`insert into recipe_requests (user_id, request, mode) values (${user.id}, ${`plan slot: ${wish}`.slice(0, 380)}, 'ai')`;
+
+    const ids = result.recipes.map((recipe) => {
+      const id = recipeId(recipe);
+      plan.recipes[id] = { ...recipe, id };
+      return id;
+    });
+    const slotKey = `${Number(day)}|${meal}`;
+    const old = plan.slots[slotKey] ?? {};
+    plan.slots[slotKey] = { recipeId: ids[0], leftovers: false, pinned: Boolean(old.pinned), note: old.note ?? "", source: "user" };
+    plan.pool[meal] = [...new Set([...ids.slice(1), ...(plan.pool[meal] ?? [])])];
+    await storePlan(user.id, plan);
+    return {
+      slotKey,
+      slot: plan.slots[slotKey],
+      recipes: ids.map((id) => plan.recipes[id]),
+      usedAi: result.usedAi,
+      notice: result.aiNotice || (!allowAi ? "You've used this week's AI requests, so this came from the library." : ""),
+    };
+  } catch (e) {
+    if (e instanceof RecipeError) return { error: e.message };
+    console.error("Recipe for slot failed", e);
+    return { error: "Something went wrong making that recipe. Please try again." };
   }
 }

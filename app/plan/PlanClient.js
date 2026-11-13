@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { makePlan, moreIdeas, saveSlots } from "./actions";
+import { makePlan, moreIdeas, recipeForSlot, saveSlots } from "./actions";
 import RecipeCard from "../RecipeCard";
-import { groceryList, localISO, slotKey, weekDays } from "../../lib/plan-shared";
+import { groceryList, localISO, slotKey, slotSource, weekDays } from "../../lib/plan-shared";
+
+// What each slot color means (see slotSource in lib/plan-shared.js).
+const SOURCE_LABEL = { user: "Your pick", request: "From your week", quick: "Quick fill" };
 
 const EXAMPLE = "Game Thursday, no time Monday or Tuesday, friends over Friday, want to grill Saturday.";
 
@@ -52,13 +55,24 @@ export default function PlanClient({ initialPlan, rules, pantry }) {
     setSaveState(res?.ok ? "Saved" : res?.error ?? "Couldn't save.");
   }
 
+  // Anything the person picks themselves turns the slot green.
   function choose(key, recipeId) {
     const old = slots[key] ?? {};
-    update({ ...slots, [key]: { ...old, recipeId, leftovers: false } });
+    update({ ...slots, [key]: { ...old, recipeId, leftovers: false, source: "user" } });
   }
   function leftovers(key) {
     const old = slots[key] ?? {};
-    update({ ...slots, [key]: { ...old, recipeId: null, leftovers: true } });
+    update({ ...slots, [key]: { ...old, recipeId: null, leftovers: true, source: "user" } });
+  }
+  // "Make a recipe for this meal" already saved the slot on the server; show it here.
+  function made(res) {
+    setPlan((p) => ({
+      ...p,
+      recipes: { ...p.recipes, ...Object.fromEntries(res.recipes.map((r) => [r.id, r])) },
+      pool: { ...p.pool, [res.slotKey.split("|")[1]]: [...new Set([...res.recipes.slice(1).map((r) => r.id), ...(p.pool[res.slotKey.split("|")[1]] ?? [])])] },
+    }));
+    setSlots((s) => ({ ...s, [res.slotKey]: res.slot }));
+    setSaveState("Saved");
   }
   // Clearing a pinned meal keeps its reason ("Grill night") so the slot still says why; clearing again removes it.
   function clear(key) {
@@ -115,7 +129,12 @@ export default function PlanClient({ initialPlan, rules, pantry }) {
             <h2>Your week <span>{plan.days[0].label} – {plan.days[6].label}</span></h2>
             <span className="plan-save" aria-live="polite">{saveState}</span>
           </div>
-          <p className="plan-legend"><span className="plan-pin-dot" /> Pinned for a reason · Click any meal to choose, swap or clear it.</p>
+          <p className="plan-legend">
+            <span className="plan-key src-user" /> Your pick
+            <span className="plan-key src-request" /> From your week
+            <span className="plan-key src-quick" /> Quick fill
+            <span className="plan-legend-tip">· Click any meal to swap it, clear it or make a recipe for it.</span>
+          </p>
 
           <div className="plan-week">
             {plan.days.map((day, d) => (
@@ -129,11 +148,14 @@ export default function PlanClient({ initialPlan, rules, pantry }) {
                   const slot = slots[key];
                   const recipe = slot?.recipeId ? plan.recipes[slot.recipeId] : null;
                   const prepHint = day.busy && (meal === "Lunch" || meal === "Dinner");
+                  const filled = Boolean(recipe || slot?.leftovers);
+                  const source = slotSource(slot);
                   return (
                     <button key={key} type="button" aria-pressed={selected === key}
-                      className={`plan-slot ${recipe || slot?.leftovers ? "filled" : "open"} ${slot?.pinned ? "pinned" : ""}`}
+                      className={`plan-slot ${filled ? `filled src-${source}` : "open"}`}
+                      title={filled ? SOURCE_LABEL[source] : undefined}
                       onClick={() => select(key)}>
-                      <span className="plan-slot-meal">{meal}{prepHint && !recipe && !slot?.leftovers ? " · prep ahead" : ""}</span>
+                      <span className="plan-slot-meal">{meal}{prepHint && !filled ? " · prep ahead" : ""}{filled && <span className="sr-only"> ({SOURCE_LABEL[source]})</span>}</span>
                       {recipe && <span className="plan-slot-title">{recipe.title}</span>}
                       {slot?.leftovers && <span className="plan-slot-title">Leftovers</span>}
                       {slot?.note && <span className="plan-slot-note">{slot.note}</span>}
@@ -157,6 +179,7 @@ export default function PlanClient({ initialPlan, rules, pantry }) {
                 onLeftovers={() => leftovers(selected)}
                 onClear={() => clear(selected)}
                 onClose={() => setSelected(null)}
+                onMade={made}
                 onMore={(listKey, recipes) => setPlan((p) => ({
                   ...p,
                   recipes: { ...p.recipes, ...Object.fromEntries(recipes.map((r) => [r.id, r])) },
@@ -196,7 +219,7 @@ export default function PlanClient({ initialPlan, rules, pantry }) {
 }
 
 // The panel under the calendar for one slot: its recipe (if any) and this week's options to choose from.
-function SlotPicker({ plan, slotId, slot, slots, onChoose, onLeftovers, onClear, onClose, onMore }) {
+function SlotPicker({ plan, slotId, slot, slots, onChoose, onLeftovers, onClear, onClose, onMore, onMade }) {
   const [dayIndex, meal] = slotId.split("|");
   const day = plan.days[Number(dayIndex)];
   const recipe = slot?.recipeId ? plan.recipes[slot.recipeId] : null;
@@ -226,8 +249,13 @@ function SlotPicker({ plan, slotId, slot, slots, onChoose, onLeftovers, onClear,
         <h2>{day.name} · {meal}</h2>
         <button type="button" className="plan-close" onClick={onClose}>Close</button>
       </div>
-      {slot?.note && <p className="plan-picker-note"><span className="plan-pin-dot" /> {slot.note}</p>}
+      {(recipe || slot?.leftovers) && (
+        <p className="plan-picker-source"><span className={`plan-key src-${slotSource(slot)}`} /> {SOURCE_LABEL[slotSource(slot)]}</p>
+      )}
+      {slot?.note && <p className="plan-picker-note"><span className="plan-key src-request" /> {slot.note}</p>}
       {prepFirst && <p className="hint">{day.busy}. Make-ahead recipes and leftovers come first.</p>}
+
+      <MakeForSlot slotId={slotId} meal={meal} day={day} hasMeal={Boolean(recipe || slot?.leftovers)} onMade={onMade} />
 
       {recipe && (
         <div className="plan-current">
@@ -273,5 +301,42 @@ function SlotPicker({ plan, slotId, slot, slots, onChoose, onLeftovers, onClear,
         {message && <span className="hint" role="status">{message}</span>}
       </div>
     </section>
+  );
+}
+
+// "Make a recipe for this meal": describe what you want for this one slot.
+function MakeForSlot({ slotId, meal, day, hasMeal, onMade }) {
+  const [wish, setWish] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  async function make(e) {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    setMessage("");
+    const res = await recipeForSlot({ key: slotId, text: wish }).catch(() => ({ error: "Couldn't reach ChatEAT. Check your connection." }));
+    setLoading(false);
+    if (res.error) { setError(res.error); return; }
+    onMade(res);
+    setWish("");
+    const others = res.recipes.length - 1;
+    setMessage(`${res.recipes[0].title} is now ${day.name}'s ${meal.toLowerCase()}.${others > 0 ? ` ${others} more ${others === 1 ? "idea is" : "ideas are"} at the top of the options below.` : ""}${res.notice ? ` ${res.notice}` : ""}`);
+  }
+
+  return (
+    <form className="plan-make" onSubmit={make}>
+      <label htmlFor="plan-make-input">{hasMeal ? "Want something else? Describe it" : "Make a recipe for this meal"}</label>
+      <div className="plan-make-row">
+        <input id="plan-make-input" type="text" maxLength={300} value={wish} onChange={(e) => setWish(e.target.value)}
+          placeholder={`e.g., something quick with chicken for ${day.name} ${meal.toLowerCase()}`} />
+        <button className="button primary small" type="submit" disabled={loading || wish.trim().length < 3}>{loading ? "Making…" : "Make it"}</button>
+      </div>
+      <span className="hint">Checks the recipe library first. A brand-new recipe uses one of your weekly AI requests.</span>
+      {loading && <div className="cook-loading"><span className="cook-spinner" aria-hidden="true" /> Finding the right {meal.toLowerCase()}…</div>}
+      {error && <p className="form-error" role="alert">{error}</p>}
+      {message && <p className="plan-make-done" role="status">{message}</p>}
+    </form>
   );
 }

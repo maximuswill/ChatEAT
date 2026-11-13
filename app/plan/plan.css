@@ -25,7 +25,6 @@
 .plan-slot { font: inherit; text-align: left; display: grid; gap: 2px; width: 100%; padding: 8px 10px; border-radius: 12px; cursor: pointer; color: var(--ink); }
 .plan-slot.open { background: var(--white); border: 2px dashed var(--sky); }
 .plan-slot.filled { background: var(--ice); border: 2px solid var(--ice); }
-.plan-slot.pinned { border: 2px solid var(--yolk); background: #fffbea; }
 .plan-slot:hover, .plan-slot[aria-pressed="true"] { border-color: var(--cobalt); }
 .plan-slot[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--ice); }
 .plan-slot-meal { font-size: 0.78rem; font-weight: 700; color: var(--cobalt); text-transform: uppercase; letter-spacing: 0.03em; }
@@ -70,3 +69,29 @@
 .plan-have { margin-top: 14px; color: var(--muted); }
 .plan-have summary { cursor: pointer; font-weight: 700; color: var(--cobalt); }
 .plan-have p { margin-top: 6px; font-size: 0.92rem; }
+
+/* Slot colors: green = their pick, blue = from their week description, orange = quick fill. */
+.plan { --src-user: #1f9d55; --src-user-bg: #e7f7ee; --src-request: #1450e6; --src-request-bg: #e6efff; --src-quick: #e8780c; --src-quick-bg: #fff1e2; }
+.plan-slot.src-user { background: var(--src-user-bg); border: 2px solid var(--src-user); border-left-width: 6px; }
+.plan-slot.src-request { background: var(--src-request-bg); border: 2px solid var(--src-request); border-left-width: 6px; }
+.plan-slot.src-quick { background: var(--src-quick-bg); border: 2px solid var(--src-quick); border-left-width: 6px; }
+.plan-slot.filled:hover, .plan-slot.filled[aria-pressed="true"] { border-color: var(--ink); }
+.plan-key { display: inline-block; width: 12px; height: 12px; border-radius: 4px; flex: none; margin-left: 6px; }
+.plan-legend .plan-key:first-child { margin-left: 0; }
+.plan-key.src-user { background: var(--src-user); }
+.plan-key.src-request { background: var(--src-request); }
+.plan-key.src-quick { background: var(--src-quick); }
+.plan-legend-tip { margin-left: 4px; }
+.plan-picker-source { display: flex; align-items: center; gap: 8px; font-weight: 700; margin-top: 6px; color: var(--muted); }
+.plan-picker-source .plan-key, .plan-picker-note .plan-key { margin-left: 0; }
+
+/* "Make a recipe for this meal" */
+.plan-make { margin-top: 14px; display: grid; gap: 6px; background: var(--ice); border-radius: 16px; padding: 14px 16px; }
+.plan-make label { font-weight: 800; }
+.plan-make-row { display: flex; gap: 8px; }
+.plan-make-row input { flex: 1 1 auto; min-width: 0; font: inherit; padding: 10px 14px; border: 2px solid var(--sky); border-radius: 12px; background: var(--white); color: var(--ink); }
+.plan-make-row input:focus { border-color: var(--cobalt); outline: none; box-shadow: 0 0 0 3px var(--white); }
+.plan-make-row .button { margin-top: 0; flex: none; }
+.plan-make .form-error { margin: 4px 0 0; }
+.plan-make-done { margin: 4px 0 0; font-weight: 700; color: var(--src-user); }
+@media (max-width: 560px) { .plan-make-row { flex-direction: column; } }
