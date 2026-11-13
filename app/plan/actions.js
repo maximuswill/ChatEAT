@@ -191,7 +191,7 @@ async function resolveMyRecipe(user, ref) {
   const [kind, id] = String(ref).split(":");
   let rows = [];
   if (kind === "lib") rows = await sql`select recipe from library_recipes where id = ${String(id)} and created_by = ${user.id}`;
-  else if (kind === "cb" && /^d+$/.test(String(id))) rows = await sql`select recipe from saved_recipes where id = ${Number(id)} and user_id = ${user.id}`;
+  else if (kind === "cb" && /^\d+$/.test(String(id))) rows = await sql`select recipe from saved_recipes where id = ${Number(id)} and user_id = ${user.id}`;
   if (!rows[0]) return null;
   return presentMine(`${kind}:${id}`, rows[0].recipe, await profileWithPantry(user.id), await viewerFor(user));
 }
