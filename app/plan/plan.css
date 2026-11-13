@@ -117,3 +117,6 @@
 .plan-eat-prep-item { font: inherit; font-weight: 700; font-size: 0.92rem; color: var(--src-prep); background: var(--src-prep-bg); border: 2px solid var(--src-prep); border-radius: 999px; padding: 6px 14px; cursor: pointer; }
 .plan-eat-prep-item:hover { background: var(--white); }
 .plan-eat-prep-item.current { background: var(--src-prep); color: var(--white); cursor: default; }
+.plan-mine { margin-top: 18px; }
+.plan-mine summary { cursor: pointer; margin-bottom: 6px; }
+.plan-mine .hint { margin: 0 0 8px; }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { makePlan, moreIdeas, recipeForSlot, saveSlots } from "./actions";
+import { makePlan, moreIdeas, myRecipes, putMyRecipe, recipeForSlot, saveSlots } from "./actions";
 import RecipeCard from "../RecipeCard";
 import RecipeMarks from "../RecipeMarks";
 import { groceryList, isPrepKey, localISO, MAX_PREP, PREP_MEAL, prepKey, prepKeys, slotKey, slotSource, weekDays } from "../../lib/plan-shared";
@@ -304,6 +304,21 @@ function SlotPicker({ plan, slotId, slot, slots, prepItems, onChoose, onLeftover
     (placed[s.recipeId] ??= []).push(isPrepKey(key) ? "meal prep" : plan.days[Number(key.split("|")[0])].name.slice(0, 3));
   }
   const canEatPrep = !isPrep && prepItems.length > 0;
+  const useLabel = isPrep ? "meal prep" : `${day.name} ${meal.toLowerCase()}`;
+
+  // Their own Make it mine and cookbook recipes, offered in every slot.
+  const [mineList, setMineList] = useState(null);
+  const [mineError, setMineError] = useState("");
+  const loadMine = () => myRecipes().then((res) => setMineList(res.recipes ?? [])).catch(() => setMineList([]));
+  useEffect(() => { loadMine(); }, []);
+  async function putMine(ref) {
+    setMineError("");
+    const res = await putMyRecipe({ key: slotId, ref }).catch(() => ({ error: "Couldn't reach ChatEAT. Check your connection." }));
+    if (res.error) { setMineError(res.error); return res; }
+    onMade(res);
+    loadMine();
+    return res;
+  }
 
   async function more() {
     setLoading(true);
@@ -332,7 +347,7 @@ function SlotPicker({ plan, slotId, slot, slots, prepItems, onChoose, onLeftover
 
       {recipe && (
         <div className="plan-current">
-          <RecipeCard recipe={recipe} />
+          <RecipeCard key={recipe.id} recipe={recipe} useLabel={useLabel} onUseMine={(version) => putMine(`lib:${version.libraryId}`)} />
         </div>
       )}
       {slot?.leftovers && <p className="plan-current-text"><strong>Leftovers</strong> from earlier in the week.</p>}
@@ -356,6 +371,29 @@ function SlotPicker({ plan, slotId, slot, slots, prepItems, onChoose, onLeftover
             ))}
           </div>
         </div>
+      )}
+
+      {mineList?.length > 0 && (
+        <details className="plan-mine" open={!recipe}>
+          <summary className="plan-options-title">Your recipes ({mineList.length})</summary>
+          <p className="hint">Your Make it mine versions <RecipeMarks marks={["mine"]} /> and cookbook recipes <RecipeMarks marks={["saved"]} />.</p>
+          {mineError && <p className="form-error" role="alert">{mineError}</p>}
+          <ul className="plan-options">
+            {mineList.filter((m) => m.recipe.id !== slot?.recipeId).map(({ ref, recipe: r }) => (
+              <li key={ref} className="plan-option">
+                <div className="plan-option-row">
+                  <div>
+                    <strong>{r.title} <RecipeMarks marks={r.marks} /></strong>
+                    <span className="plan-option-meta">{r.total_minutes ? `${r.total_minutes} min` : ""}{r.nutrition?.protein_g ? ` · ${r.nutrition.protein_g} g protein` : ""}</span>
+                  </div>
+                  <div className="plan-option-buttons">
+                    <button type="button" className="button primary small" onClick={() => putMine(ref)}>Choose</button>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
 
       <h3 className="plan-options-title">{isPrep ? "Choose something to prep" : recipe || slot?.leftovers ? "Swap for one of this week's options" : "Choose from this week's options"}</h3>

@@ -5,7 +5,10 @@ import { changeMyRecipe } from "./actions";
 import RecipeCard from "./RecipeCard";
 
 // A personal ("made for you") recipe, plus a box to ask the AI for changes as many times as you like.
-export default function PersonalRecipe({ recipe, basedOn }) {
+// `onUse` (optional, from the planner) adds a "Use this for Tuesday dinner" button for the version showing.
+export default function PersonalRecipe({ recipe, basedOn, onUse, useLabel }) {
+  const [using, setUsing] = useState(false);
+  const [used, setUsed] = useState(null);
   const [versions, setVersions] = useState([recipe]);
   const [change, setChange] = useState("");
   const [busy, setBusy] = useState(false);
@@ -31,6 +34,14 @@ export default function PersonalRecipe({ recipe, basedOn }) {
     <div className="personal">
       {basedOn && versions.length === 1 && <p className="personal-note">Started from the library&apos;s {basedOn} and tailored to your profile.</p>}
       {versions.length > 1 && <p className="personal-note">Version {versions.length}: updated with your changes.</p>}
+      {onUse && current.libraryId && (
+        <div className="personal-use">
+          <button type="button" className="button primary small" disabled={using || used === current.libraryId}
+            onClick={async () => { setUsing(true); setError(""); const res = await onUse(current); setUsing(false); if (res?.error) setError(res.error); else setUsed(current.libraryId); }}>
+            {used === current.libraryId ? `Added to ${useLabel}` : using ? "Adding…" : `Use this for ${useLabel}`}
+          </button>
+        </div>
+      )}
       <RecipeCard key={versions.length} recipe={current} startOpen allowMakeItMine={false} />
       <form className="personal-change" onSubmit={submit}>
         <label htmlFor={`change-${current.title}`} className="personal-change-label">Want anything different?</label>

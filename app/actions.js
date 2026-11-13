@@ -196,8 +196,9 @@ async function personalRequest(label, run) {
     await sql`insert into recipe_requests (user_id, request, mode) values (${user.id}, ${label.slice(0, 380)}, 'ai')`;
     // Every AI recipe is kept in the library, "Make it mine" versions included (see savePersonalToLibrary).
     if (result?.recipe) {
-      await savePersonalToLibrary(result.recipe, user.id).catch((e) => console.error("Couldn't save personal recipe to the library", e?.message));
-      result.recipe = { ...result.recipe, origin: "personal", marks: ["mine"] };
+      const stored = await savePersonalToLibrary(result.recipe, user.id).catch((e) => console.error("Couldn't save personal recipe to the library", e?.message));
+      // The library id lets the person put this exact version into their planner ("Use this for ...").
+      result.recipe = { ...result.recipe, origin: "personal", marks: ["mine"], libraryId: stored?.id ?? null };
     }
     return result;
   } catch (error) {

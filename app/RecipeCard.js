@@ -13,12 +13,12 @@ const ORIGIN_LABEL = {
 
 // The recipe without browser-only extras, for saving or personalizing.
 const core = (recipe) => {
-  const { pairings, marks, ...rest } = recipe;
+  const { pairings, marks, libraryId, ...rest } = recipe;
   return rest;
 };
 
 // One recipe: a short summary card that opens into the full recipe.
-export default function RecipeCard({ recipe, startOpen = false, saved: initiallySaved = false, footer, compact = false, allowMakeItMine = true }) {
+export default function RecipeCard({ recipe, startOpen = false, saved: initiallySaved = false, footer, compact = false, allowMakeItMine = true, onUseMine, useLabel }) {
   const [open, setOpen] = useState(startOpen);
   const [saved, setSaved] = useState(initiallySaved);
   const [saving, setSaving] = useState(false);
@@ -133,7 +133,7 @@ export default function RecipeCard({ recipe, startOpen = false, saved: initially
 
       {mine && (
         <div className="recipe-mine">
-          <PersonalRecipe recipe={mine} />
+          <PersonalRecipe recipe={mine} onUse={onUseMine} useLabel={useLabel} />
         </div>
       )}
     </article>

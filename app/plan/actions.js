@@ -10,7 +10,8 @@ import { pantryNames } from "../../lib/pantry";
 import { aiAllowed } from "../../lib/ai-budget";
 import { buildPlan, MEAL_QUERY, PREP_QUERY, recipeId } from "../../lib/planner";
 import { isPrepKey, PREP_MEAL, slotSource } from "../../lib/plan-shared";
-import { generateRecipeIdeas, RecipeError } from "../../lib/recipe-ai";
+import { generateRecipeIdeas, presentRecipe, RecipeError } from "../../lib/recipe-ai";
+import { normTitle } from "../../lib/library/search.js";
 import { viewerFor } from "../../lib/viewer";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -176,4 +177,70 @@ export async function recipeForSlot({ key, text }) {
     console.error("Recipe for slot failed", e);
     return { error: "Something went wrong making that recipe. Please try again." };
   }
+}
+
+// ---------- Your own recipes in the planner ----------
+
+// A person's own recipe, ready for their plan. Its plan id comes from where it's stored ("lib-..." or "cb-12").
+function presentMine(ref, recipe, profile, viewer) {
+  return { ...presentRecipe({ steps: [], ingredients: [], tags: [], pairs: [], ...recipe }, profile, "", [], viewer), id: ref.replace(":", "-") };
+}
+
+// Loads exactly the recipe a ref points at, only if it belongs to this person.
+async function resolveMyRecipe(user, ref) {
+  const [kind, id] = String(ref).split(":");
+  let rows = [];
+  if (kind === "lib") rows = await sql`select recipe from library_recipes where id = ${String(id)} and created_by = ${user.id}`;
+  else if (kind === "cb" && /^d+$/.test(String(id))) rows = await sql`select recipe from saved_recipes where id = ${Number(id)} and user_id = ${user.id}`;
+  if (!rows[0]) return null;
+  return presentMine(`${kind}:${id}`, rows[0].recipe, await profileWithPantry(user.id), await viewerFor(user));
+}
+
+// One person's recipes to offer in any slot: their "Make it mine" versions (newest version of each dish)
+// and their cookbook. `ref` says where each came from, so putMyRecipe can load and check it on the server.
+async function loadMyRecipes(user) {
+  const viewer = await viewerFor(user);
+  const [mineRows, savedRows] = await Promise.all([
+    sql`select id, recipe from library_recipes where created_by = ${user.id} and origin = 'mine' order by created_at desc limit 40`,
+    sql`select id, recipe from saved_recipes where user_id = ${user.id} order by created_at desc limit 40`,
+  ]);
+  const profile = await profileWithPantry(user.id);
+  const seen = new Set();
+  const out = [];
+  const push = (ref, recipe) => {
+    const key = normTitle(recipe?.title);
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    out.push({ ref, recipe: presentMine(ref, recipe, profile, viewer) });
+  };
+  for (const row of mineRows) push(`lib:${row.id}`, row.recipe);
+  for (const row of savedRows) push(`cb:${row.id}`, row.recipe);
+  return out.slice(0, 30);
+}
+
+export async function myRecipes() {
+  const { user, error } = await member();
+  if (error) return { error };
+  return { recipes: await loadMyRecipes(user) };
+}
+
+// Puts one of their own recipes into a slot or meal prep item (green, since they picked it).
+export async function putMyRecipe({ key, ref }) {
+  const { user, error } = await member();
+  if (error) return { error };
+  const plan = await loadPlan(user.id);
+  if (!plan) return { error: "Plan your week first." };
+  const info = slotInfo(plan, key);
+  if (!info) return { error: "Pick a meal on the calendar first." };
+  const recipe = await resolveMyRecipe(user, ref);
+  if (!recipe) return { error: "That recipe isn't one of yours anymore." };
+
+  const id = recipe.id;
+  plan.recipes[id] = recipe;
+  const old = plan.slots[info.key] ?? {};
+  plan.slots[info.key] = info.listKey === "prep"
+    ? { recipeId: id, source: "user" }
+    : { recipeId: id, leftovers: false, pinned: Boolean(old.pinned), note: old.note ?? "", source: "user" };
+  await storePlan(user.id, plan);
+  return { slotKey: info.key, listKey: info.listKey, slot: plan.slots[info.key], recipes: [recipe] };
 }
