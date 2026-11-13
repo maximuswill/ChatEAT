@@ -3,16 +3,23 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { makePlan, moreIdeas, recipeForSlot, saveSlots } from "./actions";
 import RecipeCard from "../RecipeCard";
-import { groceryList, localISO, slotKey, slotSource, weekDays } from "../../lib/plan-shared";
+import RecipeMarks from "../RecipeMarks";
+import { groceryList, isPrepKey, localISO, MAX_PREP, PREP_MEAL, prepKey, prepKeys, slotKey, slotSource, weekDays } from "../../lib/plan-shared";
 
 // What each slot color means (see slotSource in lib/plan-shared.js).
-const SOURCE_LABEL = { user: "Your pick", request: "From your week", quick: "Quick fill" };
+const SOURCE_LABEL = { user: "Your pick", request: "From your week", quick: "Quick fill", prep: "From your meal prep" };
 
 const EXAMPLE = "Game Thursday, no time Monday or Tuesday, friends over Friday, want to grill Saturday.";
 
 function addDays(iso, n) {
   const [y, m, d] = iso.split("-").map(Number);
   return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
+}
+
+// The recipe a slot shows: its own, or for a red slot, the meal prep item it points at.
+function slotRecipe(plan, slots, slot) {
+  if (slot?.prepFrom) return plan.recipes[slots[slot.prepFrom]?.recipeId] ?? null;
+  return slot?.recipeId ? plan.recipes[slot.recipeId] ?? null : null;
 }
 
 export default function PlanClient({ initialPlan, rules, pantry }) {
@@ -57,35 +64,58 @@ export default function PlanClient({ initialPlan, rules, pantry }) {
 
   // Anything the person picks themselves turns the slot green.
   function choose(key, recipeId) {
-    const old = slots[key] ?? {};
+    if (isPrepKey(key)) { update({ ...slots, [key]: { recipeId, source: "user" } }); return; }
+    const { prepFrom, ...old } = slots[key] ?? {};
     update({ ...slots, [key]: { ...old, recipeId, leftovers: false, source: "user" } });
   }
   function leftovers(key) {
-    const old = slots[key] ?? {};
+    const { prepFrom, ...old } = slots[key] ?? {};
     update({ ...slots, [key]: { ...old, recipeId: null, leftovers: true, source: "user" } });
+  }
+  // Eat one of the meal prep items in this slot (red).
+  function usePrep(key, fromKey) {
+    const old = slots[key] ?? {};
+    update({ ...slots, [key]: { pinned: old.pinned, note: old.note, recipeId: null, leftovers: false, prepFrom: fromKey, source: "prep" } });
   }
   // "Make a recipe for this meal" already saved the slot on the server; show it here.
   function made(res) {
     setPlan((p) => ({
       ...p,
       recipes: { ...p.recipes, ...Object.fromEntries(res.recipes.map((r) => [r.id, r])) },
-      pool: { ...p.pool, [res.slotKey.split("|")[1]]: [...new Set([...res.recipes.slice(1).map((r) => r.id), ...(p.pool[res.slotKey.split("|")[1]] ?? [])])] },
+      pool: { ...p.pool, [res.listKey]: [...new Set([...res.recipes.slice(1).map((r) => r.id), ...(p.pool[res.listKey] ?? [])])] },
     }));
     setSlots((s) => ({ ...s, [res.slotKey]: res.slot }));
     setSaveState("Saved");
   }
   // Clearing a pinned meal keeps its reason ("Grill night") so the slot still says why; clearing again removes it.
+  // Removing a meal prep item also takes it off any day that was eating it.
   function clear(key) {
-    const old = slots[key];
     const next = { ...slots };
-    if (old?.note && (old.recipeId || old.leftovers)) next[key] = { pinned: old.pinned, note: old.note, recipeId: null, leftovers: false };
-    else delete next[key];
+    if (isPrepKey(key)) {
+      delete next[key];
+      for (const [k, s] of Object.entries(next)) {
+        if (s.prepFrom !== key) continue;
+        if (s.note) next[k] = { pinned: s.pinned, note: s.note, recipeId: null, leftovers: false };
+        else delete next[k];
+      }
+      setSelected(null);
+    } else {
+      const old = slots[key];
+      if (old?.note && (old.recipeId || old.leftovers || old.prepFrom)) next[key] = { pinned: old.pinned, note: old.note, recipeId: null, leftovers: false };
+      else delete next[key];
+    }
     update(next);
   }
 
   function select(key) {
     setSelected(selected === key ? null : key);
     setTimeout(() => pickerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+  }
+  function addPrep() {
+    const used = new Set(prepKeys(slots));
+    let i = 0;
+    while (used.has(prepKey(i)) && i < MAX_PREP) i++;
+    if (i < MAX_PREP) select(prepKey(i));
   }
 
   const chosen = useMemo(() => {
@@ -96,6 +126,8 @@ export default function PlanClient({ initialPlan, rules, pantry }) {
   const groceries = useMemo(() => groceryList(chosen, pantry), [chosen, pantry]);
 
   const ended = plan && today && plan.days[6].date < today;
+  const prepItems = prepKeys(slots).filter((k) => plan?.recipes[slots[k]?.recipeId]);
+  const addingPrep = selected && isPrepKey(selected) && !slots[selected];
 
   return (
     <>
@@ -115,7 +147,7 @@ export default function PlanClient({ initialPlan, rules, pantry }) {
           </button>
           {rules.length > 0 && <span className="cook-rules">Always avoiding: <strong>{rules.join(", ")}</strong></span>}
         </div>
-        {plan && <p className="hint">Planning again replaces this week&apos;s calendar.</p>}
+        <p className="hint">Mention &ldquo;meal prep&rdquo; or days with no time and ChatEAT fills your meal prep too.{plan ? " Planning again replaces this week's calendar." : ""}</p>
       </form>
 
       {error && <p className="form-error" role="alert">{error}</p>}
@@ -133,38 +165,49 @@ export default function PlanClient({ initialPlan, rules, pantry }) {
             <span className="plan-key src-user" /> Your pick
             <span className="plan-key src-request" /> From your week
             <span className="plan-key src-quick" /> Quick fill
-            <span className="plan-legend-tip">· Click any meal to swap it, clear it or make a recipe for it.</span>
+            <span className="plan-key src-prep" /> Meal prep
+            <span className="plan-legend-tip">· <RecipeMarks marks={["mine"]} /> your Make it mine · <RecipeMarks marks={["saved"]} /> in your cookbook · Click any meal to change it.</span>
           </p>
 
-          <div className="plan-week">
-            {plan.days.map((day, d) => (
-              <div key={day.date} className={`plan-day ${day.date === today ? "today" : ""}`}>
-                <div className="plan-day-head">
-                  <strong>{day.name}</strong> <span>{day.label}</span>
-                  {day.busy && <em className="plan-busy">{day.busy}</em>}
+          <div className="plan-layout">
+            <div className="plan-week">
+              {plan.days.map((day, d) => (
+                <div key={day.date} className={`plan-day ${day.date === today ? "today" : ""}`}>
+                  <div className="plan-day-head">
+                    <strong>{day.name}</strong> <span>{day.label}</span>
+                    {day.busy && <em className="plan-busy">{day.busy}</em>}
+                  </div>
+                  {plan.meals.map((meal) => {
+                    const key = slotKey(d, meal);
+                    const slot = slots[key];
+                    const recipe = slotRecipe(plan, slots, slot);
+                    const prepHint = day.busy && (meal === "Lunch" || meal === "Dinner");
+                    return (
+                      <SlotButton key={key} meal={`${meal}${prepHint && !recipe && !slot?.leftovers ? " · prep ahead" : ""}`}
+                        slot={slot} recipe={recipe} pressed={selected === key} onClick={() => select(key)} />
+                    );
+                  })}
                 </div>
-                {plan.meals.map((meal) => {
-                  const key = slotKey(d, meal);
-                  const slot = slots[key];
-                  const recipe = slot?.recipeId ? plan.recipes[slot.recipeId] : null;
-                  const prepHint = day.busy && (meal === "Lunch" || meal === "Dinner");
-                  const filled = Boolean(recipe || slot?.leftovers);
-                  const source = slotSource(slot);
-                  return (
-                    <button key={key} type="button" aria-pressed={selected === key}
-                      className={`plan-slot ${filled ? `filled src-${source}` : "open"}`}
-                      title={filled ? SOURCE_LABEL[source] : undefined}
-                      onClick={() => select(key)}>
-                      <span className="plan-slot-meal">{meal}{prepHint && !filled ? " · prep ahead" : ""}{filled && <span className="sr-only"> ({SOURCE_LABEL[source]})</span>}</span>
-                      {recipe && <span className="plan-slot-title">{recipe.title}</span>}
-                      {slot?.leftovers && <span className="plan-slot-title">Leftovers</span>}
-                      {slot?.note && <span className="plan-slot-note">{slot.note}</span>}
-                      {!recipe && !slot?.leftovers && <span className="plan-slot-add">+ Choose</span>}
-                    </button>
-                  );
-                })}
-              </div>
-            ))}
+              ))}
+            </div>
+
+            <aside className="plan-prep" aria-label="Meal prep">
+              <h3>Meal prep</h3>
+              <p className="plan-prep-hint">Cook these ahead. Red meals on the calendar eat from them.</p>
+              {prepKeys(slots).map((key) => {
+                const recipe = plan.recipes[slots[key]?.recipeId];
+                if (!recipe) return null;
+                const eaten = Object.values(slots).filter((s) => s.prepFrom === key).length;
+                return (
+                  <SlotButton key={key} meal={eaten ? `Feeds ${eaten} ${eaten === 1 ? "meal" : "meals"}` : "Meal prep"}
+                    slot={slots[key]} recipe={recipe} pressed={selected === key} onClick={() => select(key)} />
+                );
+              })}
+              {addingPrep && <div className="plan-slot open adding" aria-hidden="true"><span className="plan-slot-add">Choose below…</span></div>}
+              {prepKeys(slots).length < MAX_PREP && !addingPrep && (
+                <button type="button" className="plan-prep-add" onClick={addPrep}>+ Add meal prep</button>
+              )}
+            </aside>
           </div>
 
           <div ref={pickerRef}>
@@ -175,8 +218,10 @@ export default function PlanClient({ initialPlan, rules, pantry }) {
                 slotId={selected}
                 slot={slots[selected]}
                 slots={slots}
+                prepItems={prepItems}
                 onChoose={(id) => choose(selected, id)}
                 onLeftovers={() => leftovers(selected)}
+                onUsePrep={(fromKey) => usePrep(selected, fromKey)}
                 onClear={() => clear(selected)}
                 onClose={() => setSelected(null)}
                 onMade={made}
@@ -195,7 +240,7 @@ export default function PlanClient({ initialPlan, rules, pantry }) {
               <p className="cook-empty">Choose some meals and their ingredients show up here.</p>
             ) : (
               <>
-                <p className="hint">For {chosen.length} {chosen.length === 1 ? "meal" : "meals"} this week{pantry.length ? ", minus what's in your pantry" : ""}. Check amounts in each recipe.</p>
+                <p className="hint">For {chosen.length} {chosen.length === 1 ? "recipe" : "recipes"} this week, meal prep included{pantry.length ? ", minus what's in your pantry" : ""}. Check amounts in each recipe.</p>
                 <ul className="plan-grocery-list">
                   {groceries.need.map((g) => (
                     <li key={g.name}>
@@ -218,25 +263,52 @@ export default function PlanClient({ initialPlan, rules, pantry }) {
   );
 }
 
-// The panel under the calendar for one slot: its recipe (if any) and this week's options to choose from.
-function SlotPicker({ plan, slotId, slot, slots, onChoose, onLeftovers, onClear, onClose, onMore, onMade }) {
-  const [dayIndex, meal] = slotId.split("|");
-  const day = plan.days[Number(dayIndex)];
-  const recipe = slot?.recipeId ? plan.recipes[slot.recipeId] : null;
-  const prepFirst = Boolean(day.busy) && (meal === "Lunch" || meal === "Dinner");
+// One meal on the calendar (or one meal prep item), colored by where it came from.
+function SlotButton({ meal, slot, recipe, pressed, onClick }) {
+  const filled = Boolean(recipe || slot?.leftovers);
+  const source = slotSource(slot);
+  return (
+    <button type="button" aria-pressed={pressed}
+      className={`plan-slot ${filled ? `filled src-${source}` : "open"}`}
+      title={filled ? SOURCE_LABEL[source] : undefined}
+      onClick={onClick}>
+      <span className="plan-slot-meal">{meal}{filled && <span className="sr-only"> ({SOURCE_LABEL[source]})</span>}</span>
+      {recipe && <span className="plan-slot-title">{recipe.title} <RecipeMarks marks={recipe.marks} /></span>}
+      {slot?.leftovers && <span className="plan-slot-title">Leftovers</span>}
+      {slot?.prepFrom && recipe && <span className="plan-slot-note">From your meal prep</span>}
+      {slot?.note && <span className="plan-slot-note">{slot.note}</span>}
+      {!filled && <span className="plan-slot-add">+ Choose</span>}
+    </button>
+  );
+}
+
+// The panel under the calendar for one slot or meal prep item: its recipe (if any) and this week's options.
+function SlotPicker({ plan, slotId, slot, slots, prepItems, onChoose, onLeftovers, onUsePrep, onClear, onClose, onMore, onMade }) {
+  const isPrep = isPrepKey(slotId);
+  const [dayIndex, mealName] = slotId.split("|");
+  const day = isPrep ? null : plan.days[Number(dayIndex)];
+  const meal = isPrep ? PREP_MEAL : mealName;
+  const listKey = isPrep ? "prep" : meal;
+  const recipe = slotRecipe(plan, slots, slot);
   const [preview, setPreview] = useState(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
-  const ids = [...new Set([...(prepFirst ? plan.pool.prep ?? [] : []), ...(plan.pool[meal] ?? [])])].filter((id) => id !== slot?.recipeId && plan.recipes[id]);
+  // Meal prep options leave out what's already being prepped.
+  const prepping = new Set(isPrep ? prepItems.map((k) => slots[k]?.recipeId) : []);
+  const ids = [...new Set(plan.pool[listKey] ?? [])].filter((id) => id !== slot?.recipeId && !prepping.has(id) && plan.recipes[id]);
   // Where each recipe already sits this week, so repeats are easy to spot (and fine for meal prep).
   const placed = {};
-  for (const [key, s] of Object.entries(slots)) if (s.recipeId) (placed[s.recipeId] ??= []).push(plan.days[Number(key.split("|")[0])].name.slice(0, 3));
+  for (const [key, s] of Object.entries(slots)) {
+    if (!s.recipeId) continue;
+    (placed[s.recipeId] ??= []).push(isPrepKey(key) ? "meal prep" : plan.days[Number(key.split("|")[0])].name.slice(0, 3));
+  }
+  const canEatPrep = !isPrep && prepItems.length > 0;
 
   async function more() {
     setLoading(true);
     setMessage("");
-    const res = await moreIdeas(meal, prepFirst).catch(() => ({ error: "Couldn't reach ChatEAT. Check your connection." }));
+    const res = await moreIdeas(slotId, false).catch(() => ({ error: "Couldn't reach ChatEAT. Check your connection." }));
     setLoading(false);
     if (res.error) { setMessage(res.error); return; }
     onMore(res.listKey, res.recipes);
@@ -244,18 +316,19 @@ function SlotPicker({ plan, slotId, slot, slots, onChoose, onLeftovers, onClear,
   }
 
   return (
-    <section className="plan-picker" aria-label={`${day.name} ${meal}`}>
+    <section className="plan-picker" aria-label={isPrep ? "Meal prep" : `${day.name} ${meal}`}>
       <div className="plan-picker-head">
-        <h2>{day.name} · {meal}</h2>
+        <h2>{isPrep ? (recipe ? "Meal prep" : "Add meal prep") : `${day.name} · ${meal}`}</h2>
         <button type="button" className="plan-close" onClick={onClose}>Close</button>
       </div>
       {(recipe || slot?.leftovers) && (
         <p className="plan-picker-source"><span className={`plan-key src-${slotSource(slot)}`} /> {SOURCE_LABEL[slotSource(slot)]}</p>
       )}
       {slot?.note && <p className="plan-picker-note"><span className="plan-key src-request" /> {slot.note}</p>}
-      {prepFirst && <p className="hint">{day.busy}. Make-ahead recipes and leftovers come first.</p>}
+      {isPrep && <p className="hint">Batch meals and make-ahead snacks to cook once. Then point any meal on the calendar at them.</p>}
+      {!isPrep && day.busy && <p className="hint">{day.busy}. Eating from your meal prep or leftovers works best.</p>}
 
-      <MakeForSlot slotId={slotId} meal={meal} day={day} hasMeal={Boolean(recipe || slot?.leftovers)} onMade={onMade} />
+      <MakeForSlot slotId={slotId} label={isPrep ? "meal prep" : `${day.name}'s ${meal.toLowerCase()}`} hasMeal={Boolean(recipe || slot?.leftovers)} onMade={onMade} />
 
       {recipe && (
         <div className="plan-current">
@@ -265,13 +338,28 @@ function SlotPicker({ plan, slotId, slot, slots, onChoose, onLeftovers, onClear,
       {slot?.leftovers && <p className="plan-current-text"><strong>Leftovers</strong> from earlier in the week.</p>}
 
       <div className="plan-picker-actions">
-        {(recipe || slot?.leftovers) && <button type="button" className="button outline small" onClick={onClear}>Clear this meal</button>}
-        {!recipe && !slot?.leftovers && slot?.note && <button type="button" className="button outline small" onClick={onClear}>Remove this note</button>}
-        {!slot?.leftovers && <button type="button" className="button outline small" onClick={onLeftovers}>Leftovers</button>}
+        {isPrep && recipe && <button type="button" className="button outline small" onClick={onClear}>Remove from meal prep</button>}
+        {!isPrep && (recipe || slot?.leftovers) && <button type="button" className="button outline small" onClick={onClear}>Clear this meal</button>}
+        {!isPrep && !recipe && !slot?.leftovers && slot?.note && <button type="button" className="button outline small" onClick={onClear}>Remove this note</button>}
+        {!isPrep && !slot?.leftovers && <button type="button" className="button outline small" onClick={onLeftovers}>Leftovers</button>}
       </div>
 
-      <h3 className="plan-options-title">{recipe || slot?.leftovers ? "Swap for one of this week's options" : "Choose from this week's options"}</h3>
-      {ids.length === 0 && <p className="cook-empty">No more options for this meal yet. Try More ideas.</p>}
+      {canEatPrep && (
+        <div className="plan-eat-prep">
+          <h3 className="plan-options-title">Eat from your meal prep</h3>
+          <div className="plan-eat-prep-list">
+            {prepItems.map((key) => (
+              <button key={key} type="button" className={`plan-eat-prep-item ${slot?.prepFrom === key ? "current" : ""}`}
+                onClick={() => onUsePrep(key)} disabled={slot?.prepFrom === key}>
+                {plan.recipes[slots[key].recipeId].title}{slot?.prepFrom === key ? " ✓" : ""}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <h3 className="plan-options-title">{isPrep ? "Choose something to prep" : recipe || slot?.leftovers ? "Swap for one of this week's options" : "Choose from this week's options"}</h3>
+      {ids.length === 0 && <p className="cook-empty">No more options yet. Try More ideas.</p>}
       <ul className="plan-options">
         {ids.map((id) => {
           const r = plan.recipes[id];
@@ -279,9 +367,9 @@ function SlotPicker({ plan, slotId, slot, slots, onChoose, onLeftovers, onClear,
             <li key={id} className="plan-option">
               <div className="plan-option-row">
                 <div>
-                  <strong>{r.title}</strong>
+                  <strong>{r.title} <RecipeMarks marks={r.marks} /></strong>
                   <span className="plan-option-meta">
-                    {r.total_minutes} min{r.active_minutes ? ` (${r.active_minutes} hands-on)` : ""} · {r.nutrition?.protein_g} g protein{r.tags?.some((t) => t === "make-ahead" || t === "meal-prep") ? " · make-ahead" : ""}
+                    {r.total_minutes} min{r.active_minutes ? ` (${r.active_minutes} hands-on)` : ""} · {r.nutrition?.protein_g} g protein{r.course === "snack" ? " · snack" : ""}{r.tags?.some((t) => t === "make-ahead" || t === "meal-prep") ? " · make-ahead" : ""}
                     {placed[id] && ` · on ${placed[id].join(", ")}`}
                   </span>
                   {r.why_it_fits && <span className="plan-option-why">{r.why_it_fits}</span>}
@@ -304,12 +392,13 @@ function SlotPicker({ plan, slotId, slot, slots, onChoose, onLeftovers, onClear,
   );
 }
 
-// "Make a recipe for this meal": describe what you want for this one slot.
-function MakeForSlot({ slotId, meal, day, hasMeal, onMade }) {
+// "Make a recipe for this meal": describe what you want for this one slot or meal prep item.
+function MakeForSlot({ slotId, label, hasMeal, onMade }) {
   const [wish, setWish] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const isPrep = isPrepKey(slotId);
 
   async function make(e) {
     e.preventDefault();
@@ -322,19 +411,19 @@ function MakeForSlot({ slotId, meal, day, hasMeal, onMade }) {
     onMade(res);
     setWish("");
     const others = res.recipes.length - 1;
-    setMessage(`${res.recipes[0].title} is now ${day.name}'s ${meal.toLowerCase()}.${others > 0 ? ` ${others} more ${others === 1 ? "idea is" : "ideas are"} at the top of the options below.` : ""}${res.notice ? ` ${res.notice}` : ""}`);
+    setMessage(`${res.recipes[0].title} ${isPrep ? "is in your meal prep" : `is now ${label}`}.${others > 0 ? ` ${others} more ${others === 1 ? "idea is" : "ideas are"} at the top of the options below.` : ""}${res.notice ? ` ${res.notice}` : ""}`);
   }
 
   return (
     <form className="plan-make" onSubmit={make}>
-      <label htmlFor="plan-make-input">{hasMeal ? "Want something else? Describe it" : "Make a recipe for this meal"}</label>
+      <label htmlFor="plan-make-input">{hasMeal ? "Want something else? Describe it" : isPrep ? "Describe what you want to prep" : "Make a recipe for this meal"}</label>
       <div className="plan-make-row">
         <input id="plan-make-input" type="text" maxLength={300} value={wish} onChange={(e) => setWish(e.target.value)}
-          placeholder={`e.g., something quick with chicken for ${day.name} ${meal.toLowerCase()}`} />
+          placeholder={isPrep ? "e.g., chicken and rice bowls for 4 lunches, or protein snack bites" : `e.g., something quick with chicken for ${label}`} />
         <button className="button primary small" type="submit" disabled={loading || wish.trim().length < 3}>{loading ? "Making…" : "Make it"}</button>
       </div>
       <span className="hint">Checks the recipe library first. A brand-new recipe uses one of your weekly AI requests.</span>
-      {loading && <div className="cook-loading"><span className="cook-spinner" aria-hidden="true" /> Finding the right {meal.toLowerCase()}…</div>}
+      {loading && <div className="cook-loading"><span className="cook-spinner" aria-hidden="true" /> Finding the right recipe…</div>}
       {error && <p className="form-error" role="alert">{error}</p>}
       {message && <p className="plan-make-done" role="status">{message}</p>}
     </form>

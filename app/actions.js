@@ -5,7 +5,8 @@ import { sql } from "../lib/db";
 import { createSession, destroySession, getCurrentUser, hashPassword, verifyPassword } from "../lib/auth";
 import { withDefaults } from "../lib/onboarding-data";
 import { getProfile } from "../lib/profile";
-import { generateRecipeIdeas, personalizeFromRequest, personalizeRecipe, refineRecipe, RecipeError } from "../lib/recipe-ai";
+import { generateRecipeIdeas, personalizeFromRequest, personalizeRecipe, refineRecipe, RecipeError, savePersonalToLibrary } from "../lib/recipe-ai";
+import { viewerFor } from "../lib/viewer";
 import { describesSpecificMeal, findLibraryDish } from "../lib/library/search.js";
 import { hardRules } from "../lib/allergens";
 import { keepDays, lookupFresh, STAPLE_CATEGORIES } from "../lib/pantry-data.js";
@@ -172,7 +173,7 @@ export async function generateRecipes({ request, avoidTitles = [] }) {
   try {
     // Library answers are free and unlimited. Only requests that use the AI count toward the daily limit.
     const allowAi = await aiAllowed(user);
-    const result = await generateRecipeIdeas(text, data, titles, { allowAi });
+    const result = await generateRecipeIdeas(text, data, titles, { allowAi, viewer: await viewerFor(user) });
     await sql`insert into recipe_requests (user_id, request, mode) values (${user.id}, ${text}, ${result.usedAi ? "ai" : "library"})`;
     return { ...result, limitReached: !allowAi };
   } catch (error) {
@@ -191,8 +192,13 @@ async function personalRequest(label, run) {
   const { data } = await getProfile(user.id);
   data.pantry = await pantryNames(user.id);
   try {
-    const result = await run(data);
+    const result = await run(data, user);
     await sql`insert into recipe_requests (user_id, request, mode) values (${user.id}, ${label.slice(0, 380)}, 'ai')`;
+    // Every AI recipe is kept in the library, "Make it mine" versions included (see savePersonalToLibrary).
+    if (result?.recipe) {
+      await savePersonalToLibrary(result.recipe, user.id).catch((e) => console.error("Couldn't save personal recipe to the library", e?.message));
+      result.recipe = { ...result.recipe, origin: "personal", marks: ["mine"] };
+    }
     return result;
   } catch (error) {
     if (error instanceof RecipeError) return { error: error.message };
@@ -215,9 +221,9 @@ export async function makeItMineFromRequest(request) {
   if (!describesSpecificMeal(text)) {
     return { notice: "\"Make it mine\" needs a specific meal, like \"chicken pot pie\" or \"lasagna but spicier.\" For ideas, use Get recipes." };
   }
-  return personalRequest(`make it mine: ${text}`, async (profile) => {
+  return personalRequest(`make it mine: ${text}`, async (profile, user) => {
     const rules = hardRules(profile);
-    return personalizeFromRequest(text, profile, (pool) => findLibraryDish(pool, text, rules));
+    return personalizeFromRequest(text, profile, (pool) => findLibraryDish(pool, text, rules), await viewerFor(user));
   });
 }
 
@@ -393,6 +399,10 @@ export async function deleteAccount(_previous, formData) {
     }
   }
 
+  // Their "Make it mine" recipes stay in the library as general recipes, minus anything personal.
+  await sql`
+    update library_recipes set created_by = null, recipe = recipe - 'personal_note' - 'personal_why' - 'created_by'
+    where created_by = ${user.id}`;
   await sql`delete from users where id = ${user.id}`; // profiles, recipes, pantry, plans and sessions go with it
   await destroySession();
   redirect("/?deleted=1");

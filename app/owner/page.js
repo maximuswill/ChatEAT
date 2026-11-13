@@ -65,11 +65,12 @@ export default async function OwnerPage({ searchParams }) {
   ]);
 
   const recipes = [
-    ...aiRows.map((row) => ({ ...row.recipe, origin: "ai", added: row.created_at })),
+    ...aiRows.map((row) => ({ ...row.recipe, origin: row.recipe.origin === "mine" ? "mine" : "ai", added: row.created_at })),
     ...CURATED,
   ];
   const shown = recipes.filter((r) => {
-    if (show !== "all" && r.origin !== show) return false;
+    if (show === "library" && r.origin !== "library") return false;
+    if (show === "ai" && r.origin === "library") return false;
     if (!q) return true;
     return [r.title, r.cuisine, r.course, r.protein, ...(r.tags ?? [])].join(" ").toLowerCase().includes(q);
   });
@@ -144,13 +145,13 @@ export default async function OwnerPage({ searchParams }) {
 
           <section className="account-card">
             <h2>Recipe library</h2>
-            <p className="account-note">{CURATED.length} built-in · {aiRows.length} saved from AI answers</p>
+            <p className="account-note">{CURATED.length} built-in · {aiRows.filter((r) => r.recipe.origin !== "mine").length} saved from AI answers · {aiRows.filter((r) => r.recipe.origin === "mine").length} Make it mine versions</p>
             <form className="owner-search" method="get" action="/owner#library">
               <input type="search" name="q" defaultValue={q} placeholder="Search title, cuisine, tag…" aria-label="Search recipes" />
               <select name="show" defaultValue={show} aria-label="Which recipes">
                 <option value="all">All recipes</option>
                 <option value="library">Built-in only</option>
-                <option value="ai">AI-saved only</option>
+                <option value="ai">AI-made only</option>
               </select>
               <button className="button primary small" type="submit">Search</button>
             </form>
@@ -161,7 +162,7 @@ export default async function OwnerPage({ searchParams }) {
                   <details>
                     <summary>
                       <span className="owner-recipe-title">{r.title}</span>
-                      <span className={`owner-tag ${r.origin === "ai" ? "ai" : "comp"}`}>{r.origin === "ai" ? "AI-saved" : "Built-in"}</span>
+                      <span className={`owner-tag ${r.origin === "library" ? "comp" : r.origin === "mine" ? "family" : "ai"}`}>{r.origin === "library" ? "Built-in" : r.origin === "mine" ? "Make it mine" : "AI-saved"}</span>
                       <span className="owner-recipe-meta">{[r.course, r.cuisine, r.total_minutes && `${r.total_minutes} min`, r.added && `added ${day(r.added)}`].filter(Boolean).join(" · ")}</span>
                     </summary>
                     <div className="owner-recipe-body">

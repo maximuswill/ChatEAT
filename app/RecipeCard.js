@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { makeItMine, saveRecipe } from "./actions";
 import PersonalRecipe from "./PersonalRecipe";
+import RecipeMarks from "./RecipeMarks";
 
 const ORIGIN_LABEL = {
   library: "From the ChatEAT library",
@@ -12,7 +13,7 @@ const ORIGIN_LABEL = {
 
 // The recipe without browser-only extras, for saving or personalizing.
 const core = (recipe) => {
-  const { pairings, ...rest } = recipe;
+  const { pairings, marks, ...rest } = recipe;
   return rest;
 };
 
@@ -53,8 +54,9 @@ export default function RecipeCard({ recipe, startOpen = false, saved: initially
           {recipe.origin && <span className={`recipe-origin ${recipe.origin}`}>{ORIGIN_LABEL[recipe.origin]}</span>}
           {recipe.style && <span className="recipe-style">{recipe.style}</span>}
         </div>
-        <h3>{recipe.title}</h3>
+        <h3>{recipe.title} <RecipeMarks marks={recipe.marks} /></h3>
         <p className="recipe-summary">{recipe.summary}</p>
+        {recipe.personal_note && <p className="recipe-personal-note"><strong>Changed for you:</strong> {recipe.personal_note}</p>}
         {recipe.why_it_fits && <p className="recipe-why"><strong>Why it fits you:</strong> {recipe.why_it_fits}</p>}
         <ul className="recipe-meta">
           <li><strong>{recipe.total_minutes} min</strong> total{recipe.active_minutes ? `, ${recipe.active_minutes} hands-on` : ""}</li>

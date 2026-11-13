@@ -1,13 +1,17 @@
 "use server";
 
+// Every AI use in the planner counts toward the person's weekly AI requests (a recipe_requests row
+// with mode 'ai'): reading the week, "More ideas" and "Make a recipe for this meal". Quick fill and
+// the meal prep fill never use the AI.
 import { sql } from "../../lib/db";
 import { getCurrentUser } from "../../lib/auth";
 import { getProfile } from "../../lib/profile";
 import { pantryNames } from "../../lib/pantry";
 import { aiAllowed } from "../../lib/ai-budget";
 import { buildPlan, MEAL_QUERY, PREP_QUERY, recipeId } from "../../lib/planner";
-import { slotSource } from "../../lib/plan-shared";
+import { isPrepKey, PREP_MEAL, slotSource } from "../../lib/plan-shared";
 import { generateRecipeIdeas, RecipeError } from "../../lib/recipe-ai";
+import { viewerFor } from "../../lib/viewer";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -35,6 +39,14 @@ async function profileWithPantry(userId) {
   return data;
 }
 
+// A calendar slot ("3|Dinner") or meal prep item ("prep|0"): which list of options and search it uses.
+function slotInfo(plan, key) {
+  if (isPrepKey(key)) return { key: String(key), meal: PREP_MEAL, listKey: "prep", query: PREP_QUERY };
+  const [day, meal] = String(key).split("|");
+  if (!(Number(day) >= 0 && Number(day) < 7) || !plan.meals.includes(meal)) return null;
+  return { key: `${Number(day)}|${meal}`, meal, listKey: meal, query: MEAL_QUERY[meal] };
+}
+
 // "Plan my week": read the week (one AI request at most), fill it from the library and save it.
 export async function makePlan({ text, start }) {
   const { user, error } = await member();
@@ -44,7 +56,7 @@ export async function makePlan({ text, start }) {
   try {
     const profile = await profileWithPantry(user.id);
     const allowAi = await aiAllowed(user);
-    const plan = await buildPlan({ text: week, start, profile, allowAi });
+    const plan = await buildPlan({ text: week, start, profile, allowAi, viewer: await viewerFor(user) });
     if (plan.usedAi) await sql`insert into recipe_requests (user_id, request, mode) values (${user.id}, ${`plan: ${week}`.slice(0, 380)}, 'ai')`;
     await storePlan(user.id, plan);
     return { plan };
@@ -54,40 +66,54 @@ export async function makePlan({ text, start }) {
   }
 }
 
-// Saves the person's picks: { "dayIndex|Meal": { recipeId, leftovers, pinned, note } }. Only recipes from this plan are allowed.
+// Saves the person's picks: { "dayIndex|Meal": { recipeId, leftovers, pinned, note, source, prepFrom },
+// "prep|0": { recipeId, source } }. Only recipes from this plan, and prep items that exist, are allowed.
 export async function saveSlots(slots) {
   const { user, error } = await member();
   if (error) return { error };
   const plan = await loadPlan(user.id);
   if (!plan) return { error: "Plan your week first." };
+  const entries = Object.entries(slots ?? {}).slice(0, 100);
   const clean = {};
-  for (const [key, slot] of Object.entries(slots ?? {}).slice(0, 80)) {
-    const [day, meal] = String(key).split("|");
-    if (!(Number(day) >= 0 && Number(day) < 7) || !plan.meals.includes(meal) || !slot) continue;
-    const id = slot.recipeId && plan.recipes[slot.recipeId] ? slot.recipeId : null;
+  for (const [key, slot] of entries) {
+    if (!isPrepKey(key) || !slot?.recipeId || !plan.recipes[slot.recipeId]) continue;
+    clean[key] = { recipeId: slot.recipeId, source: slotSource(slot) === "quick" ? "quick" : "user" };
+  }
+  for (const [key, slot] of entries) {
+    const info = !isPrepKey(key) && slotInfo(plan, key);
+    if (!info || !slot) continue;
+    const prepFrom = slot.prepFrom && clean[slot.prepFrom] ? slot.prepFrom : null;
+    const id = !prepFrom && slot.recipeId && plan.recipes[slot.recipeId] ? slot.recipeId : null;
     const note = String(slot.note ?? "").slice(0, 60);
-    if (!id && !slot.leftovers && !note) continue;
-    clean[`${Number(day)}|${meal}`] = { recipeId: id, leftovers: Boolean(slot.leftovers) && !id, pinned: Boolean(slot.pinned), note, source: slotSource(slot) };
+    if (!id && !prepFrom && !slot.leftovers && !note) continue;
+    clean[info.key] = {
+      recipeId: id, leftovers: Boolean(slot.leftovers) && !id && !prepFrom, pinned: Boolean(slot.pinned), note,
+      ...(prepFrom ? { prepFrom } : {}),
+      source: prepFrom ? "prep" : slotSource({ ...slot, prepFrom: null }),
+    };
   }
   plan.slots = clean;
   await storePlan(user.id, plan);
   return { ok: true };
 }
 
-// "More ideas" in the slot picker: library first, the AI only when the library runs out (counts as one AI request).
-export async function moreIdeas(meal, prepAhead = false) {
+// "More ideas" in the slot picker: library first, the AI only when the library runs out (one AI request).
+// Only runs when the person asks, so quick fill itself never uses the AI.
+export async function moreIdeas(key, prepAhead = false) {
   const { user, error } = await member();
   if (error) return { error };
   const plan = await loadPlan(user.id);
-  if (!plan || !plan.meals.includes(meal)) return { error: "Plan your week first." };
+  const info = plan && slotInfo(plan, key);
+  if (!info) return { error: "Plan your week first." };
   try {
     const profile = await profileWithPantry(user.id);
     const allowAi = await aiAllowed(user);
-    const request = prepAhead ? `${PREP_QUERY} ${MEAL_QUERY[meal]}` : MEAL_QUERY[meal];
+    const prep = prepAhead && info.listKey !== "prep";
+    const request = prep ? `${PREP_QUERY} ${info.query}` : info.query;
     const titles = Object.values(plan.recipes).map((r) => r.title).slice(0, 60);
-    const result = await generateRecipeIdeas(request, profile, titles, { allowAi });
-    if (result.usedAi) await sql`insert into recipe_requests (user_id, request, mode) values (${user.id}, ${`plan ideas: ${meal}`}, 'ai')`;
-    const listKey = prepAhead ? "prep" : meal;
+    const result = await generateRecipeIdeas(request, profile, titles, { allowAi, viewer: await viewerFor(user) });
+    if (result.usedAi) await sql`insert into recipe_requests (user_id, request, mode) values (${user.id}, ${`plan ideas: ${info.meal}`}, 'ai')`;
+    const listKey = prep ? "prep" : info.listKey;
     const ids = [];
     for (const recipe of result.recipes) {
       const id = recipeId(recipe);
@@ -104,23 +130,25 @@ export async function moreIdeas(meal, prepAhead = false) {
   }
 }
 
-// "Make a recipe for this meal": the person describes what they want for one slot (Tuesday dinner).
-// The library is searched first; the AI writes new recipes only when nothing fits (one AI request).
-// The best match goes in the slot (green, since they asked for it) and the runners-up become swap options.
+// "Make a recipe for this meal": the person describes what they want for one slot (Tuesday dinner)
+// or a meal prep item. The library is searched first; the AI writes new recipes only when nothing fits
+// (one AI request). The best match goes in the slot (green, since they asked for it) and the
+// runners-up become swap options.
 export async function recipeForSlot({ key, text }) {
   const { user, error } = await member();
   if (error) return { error };
   const plan = await loadPlan(user.id);
   if (!plan) return { error: "Plan your week first." };
-  const [day, meal] = String(key).split("|");
-  if (!(Number(day) >= 0 && Number(day) < 7) || !plan.meals.includes(meal)) return { error: "Pick a meal on the calendar first." };
+  const info = slotInfo(plan, key);
+  if (!info) return { error: "Pick a meal on the calendar first." };
   const wish = String(text ?? "").trim().slice(0, 300);
   if (wish.length < 3) return { error: "Tell ChatEAT a little about what you want for this meal." };
 
   try {
     const profile = await profileWithPantry(user.id);
     const allowAi = await aiAllowed(user);
-    const result = await generateRecipeIdeas(`${wish} ${MEAL_QUERY[meal]}`, profile, [], { allowAi });
+    const query = info.listKey === "prep" ? "make ahead" : info.query;
+    const result = await generateRecipeIdeas(`${wish} ${query}`, profile, [], { allowAi, viewer: await viewerFor(user) });
     if (!result.recipes.length) return { error: "ChatEAT couldn't find a recipe for that. Try describing it differently." };
     if (result.usedAi) await sql`insert into recipe_requests (user_id, request, mode) values (${user.id}, ${`plan slot: ${wish}`.slice(0, 380)}, 'ai')`;
 
@@ -129,14 +157,16 @@ export async function recipeForSlot({ key, text }) {
       plan.recipes[id] = { ...recipe, id };
       return id;
     });
-    const slotKey = `${Number(day)}|${meal}`;
-    const old = plan.slots[slotKey] ?? {};
-    plan.slots[slotKey] = { recipeId: ids[0], leftovers: false, pinned: Boolean(old.pinned), note: old.note ?? "", source: "user" };
-    plan.pool[meal] = [...new Set([...ids.slice(1), ...(plan.pool[meal] ?? [])])];
+    const old = plan.slots[info.key] ?? {};
+    plan.slots[info.key] = info.listKey === "prep"
+      ? { recipeId: ids[0], source: "user" }
+      : { recipeId: ids[0], leftovers: false, pinned: Boolean(old.pinned), note: old.note ?? "", source: "user" };
+    plan.pool[info.listKey] = [...new Set([...ids.slice(1), ...(plan.pool[info.listKey] ?? [])])];
     await storePlan(user.id, plan);
     return {
-      slotKey,
-      slot: plan.slots[slotKey],
+      slotKey: info.key,
+      listKey: info.listKey,
+      slot: plan.slots[info.key],
       recipes: ids.map((id) => plan.recipes[id]),
       usedAi: result.usedAi,
       notice: result.aiNotice || (!allowAi ? "You've used this week's AI requests, so this came from the library." : ""),

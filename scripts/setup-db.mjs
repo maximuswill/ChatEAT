@@ -72,7 +72,12 @@ await sql`
     origin text not null default 'ai',
     created_at timestamptz not null default now()
   )`;
-await sql`create unique index if not exists library_recipes_title_idx on library_recipes (lower(title))`;
+// Every AI recipe is kept, including "Make it mine" versions (origin 'mine'), which record who made them.
+// Titles are unique only among regular AI recipes, since many people can make their own version of a dish.
+await sql`alter table library_recipes add column if not exists created_by bigint references users(id) on delete set null`;
+await sql`drop index if exists library_recipes_title_idx`;
+await sql`create unique index if not exists library_recipes_ai_title_idx on library_recipes (lower(title)) where origin = 'ai'`;
+await sql`create index if not exists library_recipes_created_by_idx on library_recipes (created_by)`;
 
 // One row per AI call with its token counts and estimated cost, used for the monthly spending cap.
 await sql`
