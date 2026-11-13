@@ -6,7 +6,7 @@
 // listening for: checkout.session.completed, customer.subscription.created,
 // customer.subscription.updated, customer.subscription.deleted.
 // Then copy its signing secret (whsec_...) into STRIPE_WEBHOOK_SECRET in Vercel.
-import { stripe } from "../../../../lib/billing";
+import { cancelAt, stripe } from "../../../../lib/billing";
 import { sql } from "../../../../lib/db";
 
 export const runtime = "nodejs";
@@ -14,7 +14,8 @@ export const runtime = "nodejs";
 async function saveSubscription(sub) {
   const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer?.id;
   await sql`
-    update users set subscription_status = ${sub.status}, stripe_subscription_id = ${sub.id}
+    update users set subscription_status = ${sub.status}, stripe_subscription_id = ${sub.id},
+                     subscription_cancel_at = ${cancelAt(sub)}
     where stripe_customer_id = ${customerId}`;
 }
 

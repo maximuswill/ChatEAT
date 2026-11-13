@@ -6,10 +6,22 @@ import { AI_CREDIT_USD, isOwner } from "../../lib/owner";
 import { MONTHLY_BUDGET_USD } from "../../lib/ai-budget";
 import { CURATED } from "../../lib/library/index.js";
 import { TIERS } from "../../lib/access-codes";
+import ResetRequest from "./ResetRequests";
 import "../account/account.css";
+import "../subscribe/subscribe.css";
 import "./owner.css";
 
 export const metadata = { title: "Owner · ChatEAT" };
+
+// The owner-made reset links are fine for a handful of people; past this many paying customers, switch to emails.
+const EMAIL_RESETS_AT = 10;
+
+function ago(date) {
+  const minutes = Math.round((Date.now() - new Date(date).getTime()) / 60000);
+  if (minutes < 60) return `${Math.max(1, minutes)} min ago`;
+  if (minutes < 48 * 60) return `${Math.round(minutes / 60)} h ago`;
+  return `${Math.round(minutes / 1440)} days ago`;
+}
 
 const money = (n) => `$${Number(n).toFixed(2)}`;
 const day = (d) => new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/New_York" });
@@ -33,7 +45,7 @@ export default async function OwnerPage({ searchParams }) {
   const q = String(params?.q ?? "").trim().toLowerCase().slice(0, 80);
   const show = ["library", "ai"].includes(params?.show) ? params.show : "all";
 
-  const [[spend], byModel, users, aiRows] = await Promise.all([
+  const [[spend], byModel, users, aiRows, resetRequests] = await Promise.all([
     sql`
       select coalesce(sum(cost_usd), 0)::float as all_time,
              coalesce(sum(cost_usd) filter (where created_at >= date_trunc('month', now())), 0)::float as month,
@@ -47,6 +59,9 @@ export default async function OwnerPage({ searchParams }) {
              (select max(s.created_at) from sessions s where s.user_id = u.id) as last_login
       from users u order by u.created_at desc, u.id desc`,
     sql`select recipe, created_at from library_recipes order by created_at desc`,
+    sql`
+      select r.id, r.user_id, r.created_at, u.email from password_reset_requests r join users u on u.id = r.user_id
+      where r.handled_at is null order by r.created_at`,
   ]);
 
   const recipes = [
@@ -70,6 +85,22 @@ export default async function OwnerPage({ searchParams }) {
         <div className="container account owner">
           <h1>Owner</h1>
           <p className="account-note">Only your account can see this page. Spending numbers are ChatEAT&apos;s own estimates; your real balance is in the Anthropic Console.</p>
+
+          {paying >= EMAIL_RESETS_AT && (
+            <p className="notice">You have {paying} paying customers. Time to switch password resets to automatic emails, so people don&apos;t have to wait on you.</p>
+          )}
+
+          {resetRequests.length > 0 && (
+            <section className="account-card owner-attention">
+              <h2>Password reset requests</h2>
+              <p className="account-note">Make a link and text or message it to them.</p>
+              <ul className="owner-resets">
+                {resetRequests.map((r) => (
+                  <ResetRequest key={r.id} id={r.id} userId={r.user_id} email={r.email} asked={ago(r.created_at)} />
+                ))}
+              </ul>
+            </section>
+          )}
 
           <section className="account-card">
             <h2>AI spending</h2>

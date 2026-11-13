@@ -13,3 +13,11 @@
 .account-form { width: 100%; max-width: 420px; display: grid; gap: 4px; }
 .account-form .button { justify-self: start; margin-top: 4px; }
 .account-form .notice { margin-bottom: 12px; }
+
+/* Cancel and delete confirmations. */
+.button.danger { background: var(--danger); border-color: var(--danger); color: var(--white); }
+.button.outline.danger-outline { border-color: var(--danger); color: var(--danger); }
+.account-confirm { display: grid; gap: 10px; width: 100%; }
+.account-confirm p { margin: 0; }
+.account-confirm .field { margin-bottom: 0; }
+.account-confirm-buttons { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }

@@ -2,9 +2,11 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import AppBar from "../AppBar";
 import PasswordForm from "./PasswordForm";
-import { logOut, openBillingPortal } from "../actions";
+import { CancelSubscription, DeleteAccount } from "./AccountActions";
+import { logOut, openBillingPortal, resumeSubscription } from "../actions";
 import { getCurrentUser } from "../../lib/auth";
-import { currentPlan, formatPrice, REQUIRE_SUBSCRIPTION } from "../../lib/billing";
+import { currentPlan, formatPrice, LIVE_STATUSES, REQUIRE_SUBSCRIPTION } from "../../lib/billing";
+import { isOwner } from "../../lib/owner";
 import "./account.css";
 
 export const metadata = { title: "Account · ChatEAT" };
@@ -26,6 +28,9 @@ export default async function AccountPage({ searchParams }) {
   if (!user) redirect("/login");
   const params = await searchParams;
   const plan = await currentPlan().catch(() => null);
+  const endsOn = user.subscription_cancel_at
+    ? new Date(user.subscription_cancel_at).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "America/New_York" })
+    : null;
 
   return (
     <>
@@ -34,6 +39,8 @@ export default async function AccountPage({ searchParams }) {
         <div className="container account">
           <h1>Account</h1>
           {params?.billing === "unavailable" && <p className="notice">Subscription management isn&apos;t available right now. Please try again later.</p>}
+          {params?.billing === "canceled" && endsOn && <p className="notice">Your subscription is canceled. You won&apos;t be charged again, and you have access until {endsOn}.</p>}
+          {params?.billing === "resumed" && !endsOn && <p className="notice">Your subscription is back on. Nothing else changes.</p>}
 
           <section className="account-card">
             <h2>Profile</h2>
@@ -47,15 +54,22 @@ export default async function AccountPage({ searchParams }) {
             <h2>Plan</h2>
             {user.comp_access ? (
               <p>You have <strong>complimentary full access</strong>. There&apos;s nothing to pay or manage.</p>
-            ) : user.stripe_subscription_id ? (
+            ) : user.stripe_subscription_id && LIVE_STATUSES.includes(user.subscription_status) ? (
               <>
                 <dl className="account-facts">
                   <div><dt>Plan</dt><dd>ChatEAT Monthly{plan ? `, ${formatPrice(plan)} a ${plan.interval}` : ""}</dd></div>
-                  <div><dt>Status</dt><dd>{STATUS_TEXT[user.subscription_status] ?? user.subscription_status ?? "Unknown"}</dd></div>
+                  <div><dt>Status</dt><dd>{endsOn ? `Canceled. You have access until ${endsOn}.` : (STATUS_TEXT[user.subscription_status] ?? user.subscription_status)}</dd></div>
                 </dl>
-                <p className="account-note">Update your card, see receipts or cancel on Stripe&apos;s secure billing page. If you cancel, you keep access until the end of the period you&apos;ve paid for.</p>
+                {endsOn ? (
+                  <form action={resumeSubscription}>
+                    <button className="button primary small" type="submit">Keep my subscription</button>
+                  </form>
+                ) : (
+                  <CancelSubscription />
+                )}
+                <p className="account-note">Update your card or see receipts on Stripe&apos;s secure billing page.</p>
                 <form action={openBillingPortal}>
-                  <button className="button primary small" type="submit">Manage or cancel subscription</button>
+                  <button className="button outline small" type="submit">Card and receipts</button>
                 </form>
               </>
             ) : (
@@ -77,6 +91,13 @@ export default async function AccountPage({ searchParams }) {
               <button className="button outline small" type="submit">Log out</button>
             </form>
           </section>
+
+          {!isOwner(user) && (
+            <section className="account-card">
+              <h2>Delete account</h2>
+              <DeleteAccount hasSubscription={Boolean(user.stripe_subscription_id && LIVE_STATUSES.includes(user.subscription_status) && !endsOn)} />
+            </section>
+          )}
         </div>
       </main>
     </>

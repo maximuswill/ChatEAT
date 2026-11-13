@@ -10,9 +10,11 @@ import { describesSpecificMeal, findLibraryDish } from "../lib/library/search.js
 import { hardRules } from "../lib/allergens";
 import { keepDays, lookupFresh, STAPLE_CATEGORIES } from "../lib/pantry-data.js";
 import { pantryNames } from "../lib/pantry.js";
-import { REQUIRE_SUBSCRIPTION, siteUrl, stripe } from "../lib/billing";
+import { cancelAt, LIVE_STATUSES, REQUIRE_SUBSCRIPTION, siteUrl, stripe } from "../lib/billing";
+import { isOwner } from "../lib/owner";
 import { aiAllowed, weeklyAiLimit } from "../lib/ai-budget";
 import { tierForCode } from "../lib/access-codes";
+import { clearAttempts, clientIp, limited, LIMITS, recordAttempt, waitMessage } from "../lib/rate-limit";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD = 8;
@@ -39,9 +41,15 @@ export async function signUp(_previous, formData) {
 
   // Optional friends & family code. A wrong code stops sign-up so nobody lands on the payment page by mistake.
   const code = String(formData.get("code") ?? "").trim().slice(0, 100);
-  const tier = code ? tierForCode(code) : null;
-  if (code && !tier) {
-    return { error: "That friends & family code isn't valid. Check it, or leave it blank to sign up normally.", email, code };
+  let tier = null;
+  if (code) {
+    const ip = await clientIp();
+    if (await limited(LIMITS.code, ip)) return { error: waitMessage(LIMITS.code.minutes), email, code };
+    tier = tierForCode(code);
+    if (!tier) {
+      await recordAttempt(LIMITS.code, ip);
+      return { error: "That friends & family code isn't valid. Check it, or leave it blank to sign up normally.", email, code };
+    }
   }
 
   const passwordHash = await hashPassword(password);
@@ -63,8 +71,13 @@ export async function signUp(_previous, formData) {
 export async function redeemCode(_previous, formData) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  const ip = await clientIp();
+  if (await limited(LIMITS.code, ip)) return { error: waitMessage(LIMITS.code.minutes) };
   const tier = tierForCode(String(formData.get("code") ?? "").slice(0, 100));
-  if (!tier) return { error: "That code isn't valid. Check it and try again." };
+  if (!tier) {
+    await recordAttempt(LIMITS.code, ip);
+    return { error: "That code isn't valid. Check it and try again." };
+  }
   await sql`update users set comp_access = true, access_tier = ${tier} where id = ${user.id}`;
   redirect("/onboarding");
 }
@@ -75,10 +88,20 @@ export async function logIn(_previous, formData) {
 
   if (!email || !password || password.length > 200) return failed;
 
+  // After too many wrong passwords, stop checking for a while (per email and per device).
+  const ip = await clientIp();
+  if ((await limited(LIMITS.loginEmail, email)) || (await limited(LIMITS.loginDevice, ip))) {
+    return { error: `${waitMessage(LIMITS.loginEmail.minutes)} Forgot your password? Use the link below.`, email };
+  }
+
   const rows = await sql`select id, password_hash from users where email = ${email} limit 1`;
   const user = rows[0];
-  if (!user || !(await verifyPassword(password, user.password_hash))) return failed;
+  if (!user || !(await verifyPassword(password, user.password_hash))) {
+    await Promise.all([recordAttempt(LIMITS.loginEmail, email), recordAttempt(LIMITS.loginDevice, ip)]);
+    return failed;
+  }
 
+  await clearAttempts(LIMITS.loginEmail, email);
   await createSession(user.id);
   redirect("/dashboard");
 }
@@ -119,8 +142,12 @@ export async function changePassword(_previous, formData) {
   if (next.length > 200) return { error: "That password is too long." };
   if (next !== confirm) return { error: "The new passwords don't match." };
 
+  if (await limited(LIMITS.loginEmail, user.email)) return { error: waitMessage(LIMITS.loginEmail.minutes) };
   const [row] = await sql`select password_hash from users where id = ${user.id}`;
-  if (!row || !(await verifyPassword(current, row.password_hash))) return { error: "Your current password isn't right." };
+  if (!row || !(await verifyPassword(current, row.password_hash))) {
+    await recordAttempt(LIMITS.loginEmail, user.email);
+    return { error: "Your current password isn't right." };
+  }
 
   await sql`update users set password_hash = ${await hashPassword(next)} where id = ${user.id}`;
   // Log out everywhere else, then start a fresh session here.
@@ -302,4 +329,71 @@ export async function openBillingPortal() {
     redirect("/account?billing=unavailable");
   }
   redirect(url);
+}
+
+// ---------- Cancel or resume a subscription (Account page) ----------
+
+// Cancels at the end of the paid period: they keep access until then and aren't charged again.
+export async function cancelSubscription() {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  if (!user.stripe_subscription_id) redirect("/account");
+  try {
+    const sub = await stripe().subscriptions.update(user.stripe_subscription_id, { cancel_at_period_end: true });
+    // Saved here as well as by the Stripe webhook, so the page is right immediately.
+    await sql`update users set subscription_status = ${sub.status}, subscription_cancel_at = ${cancelAt(sub)} where id = ${user.id}`;
+  } catch (error) {
+    console.error("Cancel subscription failed", error?.message);
+    redirect("/account?billing=unavailable");
+  }
+  redirect("/account?billing=canceled");
+}
+
+// Undoes a cancel before the paid period ends.
+export async function resumeSubscription() {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  if (!user.stripe_subscription_id) redirect("/account");
+  try {
+    const sub = await stripe().subscriptions.update(user.stripe_subscription_id, { cancel_at_period_end: false });
+    await sql`update users set subscription_status = ${sub.status}, subscription_cancel_at = ${cancelAt(sub)} where id = ${user.id}`;
+  } catch (error) {
+    console.error("Resume subscription failed", error?.message);
+    redirect("/account?billing=unavailable");
+  }
+  redirect("/account?billing=resumed");
+}
+
+// ---------- Delete account (Account page) ----------
+
+// Needs their password and the word DELETE. Any subscription is canceled right away (no refund),
+// then everything of theirs is erased. Stripe keeps its own payment records, as it must.
+export async function deleteAccount(_previous, formData) {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  if (isOwner(user)) return { error: "The owner account can't be deleted from here." };
+  if (String(formData.get("confirm") ?? "").trim().toUpperCase() !== "DELETE") return { error: "Type DELETE to confirm." };
+
+  if (await limited(LIMITS.loginEmail, user.email)) return { error: waitMessage(LIMITS.loginEmail.minutes) };
+  const [row] = await sql`select password_hash, stripe_subscription_id, subscription_status from users where id = ${user.id}`;
+  if (!row || !(await verifyPassword(String(formData.get("password") ?? ""), row.password_hash))) {
+    await recordAttempt(LIMITS.loginEmail, user.email);
+    return { error: "That password isn't right." };
+  }
+
+  if (row.stripe_subscription_id && LIVE_STATUSES.includes(row.subscription_status)) {
+    try {
+      await stripe().subscriptions.cancel(row.stripe_subscription_id);
+    } catch (error) {
+      // Never erase someone who could still be charged.
+      if (error?.code !== "resource_missing") {
+        console.error("Cancel before delete failed", error?.message);
+        return { error: "We couldn't cancel your subscription just now, so your account wasn't deleted. Please try again in a minute." };
+      }
+    }
+  }
+
+  await sql`delete from users where id = ${user.id}`; // profiles, recipes, pantry, plans and sessions go with it
+  await destroySession();
+  redirect("/?deleted=1");
 }

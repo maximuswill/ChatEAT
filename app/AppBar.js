@@ -4,6 +4,7 @@ import { logOut } from "./actions";
 import { getCurrentUser } from "../lib/auth";
 import { AI_CREDIT_USD, isOwner } from "../lib/owner";
 import { spentAllTime } from "../lib/ai-budget";
+import { sql } from "../lib/db";
 
 // Top bar for logged-in pages.
 export default async function AppBar({ email, current }) {
@@ -15,7 +16,11 @@ export default async function AppBar({ email, current }) {
     ["/cookbook", "Cookbook"],
   ];
   const owner = isOwner(await getCurrentUser());
-  if (owner) links.push(["/owner", "Owner"]);
+  if (owner) {
+    // A badge when people are waiting on a password reset link.
+    const [{ count } = { count: 0 }] = await sql`select count(*)::int as count from password_reset_requests where handled_at is null`.catch(() => []);
+    links.push(["/owner", count ? <>Owner<span className="reset-badge" title={`${count} password reset request${count === 1 ? "" : "s"}`}>{count}</span></> : "Owner"]);
+  }
   return (
     <header className="app-bar">
       <nav className="nav container" aria-label="Account">

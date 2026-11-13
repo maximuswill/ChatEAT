@@ -120,6 +120,38 @@ await sql`alter table users add column if not exists stripe_subscription_id text
 await sql`alter table users add column if not exists subscription_status text`;
 // Which friends & family code gave someone free access: 'family_full', 'family_limited' or null (see lib/access-codes.js).
 await sql`alter table users add column if not exists access_tier text`;
+// When a canceled subscription stops (set while it's still running until the end of the paid period).
+await sql`alter table users add column if not exists subscription_cancel_at timestamptz`;
+
+// Failed logins, wrong codes and reset requests, used to slow down guessing (see lib/rate-limit.js).
+await sql`
+  create table if not exists auth_attempts (
+    id bigint generated always as identity primary key,
+    kind text not null,
+    key text not null,
+    created_at timestamptz not null default now()
+  )`;
+await sql`create index if not exists auth_attempts_lookup_idx on auth_attempts (kind, key, created_at)`;
+await sql`delete from auth_attempts where created_at < now() - interval '1 day'`;
+
+// "Forgot password?" requests waiting for the owner, and the one-time reset links the owner makes.
+await sql`
+  create table if not exists password_reset_requests (
+    id bigint generated always as identity primary key,
+    user_id bigint not null references users(id) on delete cascade,
+    created_at timestamptz not null default now(),
+    handled_at timestamptz
+  )`;
+await sql`
+  create table if not exists password_reset_tokens (
+    token_hash text primary key,
+    user_id bigint not null references users(id) on delete cascade,
+    expires_at timestamptz not null,
+    used_at timestamptz,
+    created_at timestamptz not null default now()
+  )`;
+await sql`delete from password_reset_tokens where expires_at < now() - interval '7 days'`;
+
 // Accounts given full access before billing existed keep it for free.
 await sql`update users set comp_access = true where has_paid_access = true and comp_access = false`;
 
@@ -137,4 +169,4 @@ await sql`
         comp_access = true`;
 
 const [{ count }] = await sql`select count(*)::int as count from users`;
-console.log(`Database ready. Tables: users, sessions, profiles, saved_recipes, recipe_requests, library_recipes, ai_usage, pantry_staples, pantry_items, meal_plans. Demo account ready. Total accounts: ${count}.`);
+console.log(`Database ready. Tables: users, sessions, profiles, saved_recipes, recipe_requests, library_recipes, ai_usage, pantry_staples, pantry_items, meal_plans, auth_attempts, password_reset_requests, password_reset_tokens. Demo account ready. Total accounts: ${count}.`);

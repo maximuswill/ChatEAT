@@ -47,6 +47,7 @@ export default function AuthForm({ mode }) {
           <label htmlFor="password">Password</label>
           <input id="password" name="password" type="password" autoComplete={m.passwordAutocomplete} required minLength={mode === "signup" ? 8 : undefined} aria-describedby={mode === "signup" ? "password-hint" : undefined} />
           {mode === "signup" && <span className="hint" id="password-hint">At least 8 characters.</span>}
+          {mode === "login" && <Link className="forgot-link" href="/forgot">Forgot password?</Link>}
         </div>
         {mode === "signup" && <CodeField initial={state?.code ?? ""} />}
         <button className="button primary" type="submit" disabled={pending}>{pending ? m.busy : m.button}</button>

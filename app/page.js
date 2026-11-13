@@ -9,9 +9,10 @@ const ICONS = [
   <path d="M7 40h34M12 40V29M24 40V19M36 40V8" />,
 ];
 
-export default async function HomePage() {
+export default async function HomePage({ searchParams }) {
   const C = CONTENT;
   const user = await getCurrentUser();
+  const deleted = (await searchParams)?.deleted === "1" && !user;
 
   return (
     <>
@@ -36,6 +37,7 @@ export default async function HomePage() {
             </div>
           </div>
         </nav>
+        {deleted && <p className="notice container deleted-notice" role="status">Your account has been deleted. Thanks for cooking with ChatEAT.</p>}
 
         <div className="hero-body container" id="top">
           <div>

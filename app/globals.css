@@ -244,3 +244,6 @@ footer a { font-weight: 700; color: var(--white); text-underline-offset: 3px; }
 
 /* "Have a friends & family code?" link on the sign-up form and subscribe page. */
 .code-toggle { display: block; background: none; border: 0; padding: 0; margin: -6px 0 18px; font: inherit; font-size: 0.92rem; font-weight: 700; color: var(--cobalt); text-decoration: underline; text-underline-offset: 4px; cursor: pointer; }
+.deleted-notice { color: var(--ink); max-width: max-content; margin: 8px auto 0; }
+.forgot-link { justify-self: end; font-size: 0.9rem; font-weight: 700; color: var(--cobalt); }
+.reset-badge { background: var(--yolk); color: var(--ink); border-radius: 99px; padding: 1px 8px; margin-left: 6px; font-size: 0.8rem; }
