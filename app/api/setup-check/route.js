@@ -3,14 +3,15 @@
 // Open https://<your-site>/api/setup-check while logged in.
 import { getCurrentUser } from "../../../lib/auth";
 import { isOwner } from "../../../lib/owner";
+import { setting } from "../../../lib/setting";
 
 export const dynamic = "force-dynamic";
 
-const has = (name) => Boolean(String(process.env[name] ?? "").replace(/["'\s]/g, ""));
+const has = (name) => Boolean(setting(name));
 
 export async function GET() {
   const user = await getCurrentUser().catch(() => null);
-  const ownerSetting = String(process.env.CHATEAT_OWNER_EMAIL ?? "");
+  const ownerSetting = setting("CHATEAT_OWNER_EMAIL");
   return Response.json({
     deployment: {
       environment: process.env.VERCEL_ENV ?? "local",
